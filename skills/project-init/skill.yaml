@@ -1,0 +1,244 @@
+name: project-init
+description: Bootstrap a new IDD-ready repository from a legacy codebase — initialize popsicle, pin the legacy source as a submodule, scaffold the per-product 4-piece doc structure (PRODUCT/ARCHITECTURE/intents/decisions+proposals), and produce a migration plan that names the products and the first slice
+version: "0.1.0"
+
+# project-init is the very first skill run when adopting IDD on an existing
+# project. It produces the directory skeleton and a migration plan; it does
+# NOT produce any product/decision content yet. fact-extractor produces the
+# evidence; PRD/RFC writers produce content; project-init only lays out the
+# stage they perform on.
+inputs:
+  - from_skill: fact-extractor
+    artifact_type: fact-extraction-report
+    required: false
+    relevance: high
+    # Optional but strongly recommended — fact-extractor's "Bounded Contexts"
+    # table is the best signal for product naming. Without it, the agent must
+    # ask the human to enumerate products.
+
+artifacts:
+  - type: project-init-plan
+    template: templates/project-init-plan.md
+    file_pattern: "{slug}.project-init-plan.md"
+    description: "Decisions made during init: product naming, first-slice pick, legacy-submodule pin, what was scaffolded"
+
+  - type: doc-architecture-charter
+    template: templates/doc-architecture-charter.md
+    file_pattern: "{slug}.doc-architecture-charter.md"
+    description: "The non-negotiable rules of the doc system (living docs vs decision archive, the four iron laws, where each kind of content goes). Lives at docs/CHARTER.md after promotion."
+
+workflow:
+  initial: surveying
+  states:
+    surveying:
+      description: "Read fact-extraction-report (if present), interview the human for product names + legacy-repo URL + first-slice pick"
+      transitions:
+        - to: planning
+          action: plan
+          guard: "checklist_complete:Survey Checklist"
+
+    planning:
+      description: "Draft the project-init-plan + the doc-architecture-charter; do NOT touch the file system yet — the plan is reviewed first"
+      transitions:
+        - to: scaffolding
+          action: approve
+          guard: "has_sections:Repository Identity,Product Inventory,Legacy Source,First Migration Slice,Scaffolding Manifest;checklist_complete:Plan Checklist"
+          requires_approval: true
+        - to: surveying
+          action: revise
+
+    scaffolding:
+      description: "Execute the scaffold per the approved plan: popsicle init, submodule add, mkdir tree, write skeleton files, install module deps"
+      transitions:
+        - to: completed
+          action: confirm
+          guard: "checklist_complete:Scaffolding Verification"
+          requires_approval: true
+
+    completed:
+      final: true
+
+prompts:
+  surveying: |
+    You are bootstrapping a new IDD-ready repository for migrating a legacy codebase.
+    Your job in this state: gather the facts needed to plan the scaffold.
+
+    ## Gather (in order)
+
+    1. **Legacy source identity**
+       - Repo URL or local path
+       - Pinning commit SHA (default: current HEAD of the legacy repo's main branch)
+       - License (carry over to new repo? must be compatible)
+
+    2. **Product inventory** — the most important decision in this skill
+       - If `fact-extraction-report.md` is available, start from its Bounded Contexts table
+       - If not, ask the human: "What top-level products live in this codebase? (3-7 typical)"
+       - Validate: every product must be a thing a customer / external consumer recognizes, not an internal module
+       - Bad product names: `core`, `utils`, `common`, `shared`, `lib`
+       - Good product names: `database`, `network`, `simulation`, `viz`, `cli`, `web-ui`
+       - For each product, note: 1-line purpose + estimated LoC (from fact-extraction-report if available)
+
+    3. **First migration slice**
+       - Per the doc-architecture principles: pick the product with HIGHEST CHURN that is RELATIVELY INDEPENDENT (few reverse deps)
+       - Refer to fact-extraction-report's Risk Hotspots if available
+       - This product gets its 4-piece scaffold populated first; others get empty scaffolds
+       - Document at least one alternative considered
+
+    4. **Repository identity**
+       - New repo name
+       - Issue key prefix (popsicle requires; e.g. INTENT, PROJ — used in BUG-INTENT-1, TC-INTENT-1)
+       - Default agent target (claude / cursor / copilot / codex / opencode)
+
+    5. **Module dependencies to install**
+       - intent-coder (this module — always)
+       - popsicle-spec-development (for PRD/RFC/ADR writers — recommended)
+       - popsicle-intent-development (for intent-lang spec writers — recommended)
+       - Confirm install paths
+
+    ## Anti-patterns to refuse
+
+    - Naming products after directories ("crates", "modules", "packages")
+    - Picking the most-critical product as the first slice (too risky for a learning iteration)
+    - Picking a product with > 5 reverse deps as the first slice (too entangled)
+    - Skipping the legacy-submodule step — every fact in downstream artifacts must cite a pinned source
+
+    ## Survey Checklist
+
+    Mark each box only when verified, not when assumed:
+
+    - [ ] Legacy repo URL + pinning commit SHA captured
+    - [ ] License compatibility checked (or explicitly waived with reason)
+    - [ ] 3-7 products named, each with 1-line purpose
+    - [ ] Every product name passes the "customer-recognizable" test
+    - [ ] First migration slice chosen with at least one alternative considered
+    - [ ] New repo name + issue key prefix decided
+    - [ ] Module dependency install paths verified to exist
+    - [ ] If fact-extraction-report missing: human explicitly OK with surveying without it
+
+  planning: |
+    You have surveyed enough; now produce two artifacts:
+
+    ## Artifact 1: `project-init-plan.md`
+
+    A reviewable record of every decision. Includes a **Scaffolding Manifest** —
+    a flat list of every file/directory the next state will create, so the human
+    can sign off before anything is written.
+
+    Required sections (the workflow guard checks these):
+    - **Repository Identity** — name, prefix, default agent, license
+    - **Product Inventory** — table of products with purpose + LoC + status (slice / scaffold-only)
+    - **Legacy Source** — URL, pinned commit, submodule path, license check
+    - **First Migration Slice** — chosen product + rationale + alternatives
+    - **Scaffolding Manifest** — every directory + every file with purpose
+
+    The Scaffolding Manifest MUST list, for each product:
+    - `products/<name>/PRODUCT.md` (skeleton, contains `[TBD: needs archaeology]` markers)
+    - `products/<name>/ARCHITECTURE.md` (skeleton)
+    - `products/<name>/intents/{invariants,contracts,acceptance}.intent` (empty stubs)
+    - `products/<name>/decisions/{adr,pdr}/.gitkeep`
+    - `products/<name>/proposals/{exploring,proposed,accepted,rejected}/.gitkeep`
+
+    And at the repo level:
+    - `docs/CHARTER.md` (from artifact 2 below)
+    - `docs/invariants/README.md` (empty index)
+    - `docs/baseline/.gitkeep`
+    - `docs/glossary.md` (skeleton)
+    - `docs/PROJECT_CONTEXT.md` (skeleton, will be filled by living-doc-author later)
+    - `migration/slices/.gitkeep`
+    - `migration/traceability.md` (skeleton with empty mapping table)
+    - `migration/progress.md` (skeleton with empty kanban)
+    - `.gitattributes` (with `*.intent linguist-language=Scala`)
+    - `.gitmodules` (auto-managed by `git submodule add`)
+    - `CONTRIBUTING.md` (the IDD workflow rules — both human and AI agent read this)
+
+    ## Artifact 2: `doc-architecture-charter.md`
+
+    The non-negotiable rules of the doc system. Promoted to `docs/CHARTER.md`
+    after scaffolding. Use the **Charter Source** section below VERBATIM —
+    these are the rules the user has already locked in:
+
+    > **The Four Iron Laws of the Doc System**
+    >
+    > 1. **Living docs have no version number** — only Last-Updated and
+    >    Last-Decision-Ref. They always represent NOW. Outdated content is
+    >    fixed in place; no historical narrative.
+    > 2. **Decision archive is append-only** — ADR/PDR files are never modified
+    >    after Accepted. Wrong decisions are corrected by writing a NEW
+    >    decision that Supersedes them.
+    > 3. **Every living-doc edit must reference a decision ID** (except typo /
+    >    link / wording fixes). CI enforces this on PRs touching PRODUCT.md or
+    >    ARCHITECTURE.md.
+    > 4. **One change can touch many living docs** — the triggering ADR/PDR's
+    >    Consequences section MUST list every living-doc section it forces an
+    >    update to; the PR must update them all in one go.
+
+    Required sections:
+    - **The Four Iron Laws** (verbatim from above)
+    - **Layer Map** (the 7-row table: L0 Charter / L1 Invariants / L2 PRD / L3 ADR / L4 RFC / L5 Change / L6 Code — with constraint object, change frequency, owner, intent-lang status per row)
+    - **Per-Product 4-Piece Set** (PRODUCT.md / ARCHITECTURE.md / intents/ / decisions+proposals/ — each with audience, update method, what NOT to write here)
+    - **Three-Layer Intent Hierarchy** (global / product / feature — what goes where)
+    - **PRFC Lifecycle** (Exploring → Proposed → Accepted/Rejected → Superseded — explain why product side has Exploring but tech side does not)
+    - **Forbidden Phrases in Living Docs** ("曾经" / "originally" / "we used to" — these belong in ADR/PDR narrative, never in living docs)
+    - **Anti-Patterns** (5 patterns from the source discussion: living docs as wiki, ADR as diary, per-microservice splits, roadmap as wishlist, doc-code drift)
+
+    ## Plan Checklist
+
+    - [ ] Scaffolding Manifest is exhaustive — every file the next state creates is listed
+    - [ ] Every product entry shows status (slice / scaffold-only) and purpose
+    - [ ] Charter quotes the Four Iron Laws verbatim
+    - [ ] Layer Map table has all 7 rows
+    - [ ] Per-Product 4-Piece Set section exists and explicitly lists what NOT to write in each piece
+    - [ ] PRFC Lifecycle explains the Exploring state's purpose
+    - [ ] Forbidden Phrases section present
+    - [ ] Anti-Patterns section lists 5 patterns from the source discussion
+
+  scaffolding: |
+    You have an approved plan. Execute it precisely — no improvisation.
+
+    ## Order of operations
+
+    1. `popsicle init` (if `.popsicle/` does not exist)
+    2. Create `.gitattributes` if missing — append `*.intent linguist-language=Scala`
+    3. `git submodule add <legacy-url> legacy/<legacy-name>` then `git -C legacy/<legacy-name> checkout <pinned-sha>`
+    4. For each module dependency in the plan: `popsicle module add <path>`
+    5. Create directory tree per the Scaffolding Manifest (use `mkdir -p`)
+    6. Write each skeleton file. Skeletons MUST contain `[TBD: needs archaeology]`
+       markers in any field where a real value would normally go — never invent
+       content.
+    7. Promote `doc-architecture-charter.md` to `docs/CHARTER.md`
+    8. Run `git status` to confirm the diff matches the manifest
+    9. Do NOT git commit — leave that for the human
+
+    ## Scaffolding Verification
+
+    For each row in the Scaffolding Manifest, verify the file/directory now
+    exists. Then verify the negative cases:
+
+    - [ ] Every file in the Scaffolding Manifest exists on disk
+    - [ ] No file outside the manifest was created
+    - [ ] `legacy/<name>/.git` exists (submodule pinned correctly)
+    - [ ] `git -C legacy/<name> rev-parse HEAD` matches the pinned SHA in the plan
+    - [ ] `popsicle module list` shows every module from the plan
+    - [ ] `.gitattributes` contains `*.intent linguist-language=Scala`
+    - [ ] No skeleton file contains hallucinated content — every value is either
+          template-default or `[TBD: needs archaeology]`
+    - [ ] `git status` shows the expected new files; nothing tracked was modified
+          unexpectedly
+
+# project-init does not run unless the human triggers it. There are no
+# automatic upstream triggers (it has no required inputs).
+hooks:
+  post_complete:
+    - description: "Remind the human of the next two skills to run"
+      message: |
+        ✅ Repository scaffolded. Suggested next steps:
+
+        1. Run `fact-extractor` against `legacy/<name>` to produce the baseline
+           (output → `docs/baseline/<today>/`).
+        2. After fact-extractor completes, the chosen first-slice product is
+           ready for `prd-writer` (from popsicle-spec-development) to populate
+           `products/<slice>/PRODUCT.md`.
+
+        Do NOT start writing other products' content until the first slice
+        completes its full PRFC → PDR → PRODUCT.md cycle. The first slice is
+        your playbook; the others copy it.
