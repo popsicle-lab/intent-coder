@@ -1,0 +1,158 @@
+name: fact-extractor
+description: Reverse-engineer a legacy codebase into a structured fact-base — dependency graph, public-API contracts, unsafe/risk inventory, and tech-debt list — that downstream IDD skills consume as ground truth
+version: "0.1.0"
+
+# fact-extractor has NO upstream — it is the entry point of the IDD adoption
+# journey. It runs directly against a legacy code tree and produces artifacts
+# every PRD/RFC/spec writer downstream will reference.
+inputs: []
+
+# Five tightly-scoped artifacts. Each one answers a single question. Keeping
+# them separate lets downstream skills cite them precisely (e.g. PRD cites
+# api-contracts; RFC cites dependency-graph; safety-spec cites unsafe-risk).
+artifacts:
+  - type: fact-extraction-report
+    template: templates/fact-extraction-report.md
+    file_pattern: "{slug}.fact-extraction-report.md"
+    description: "Top-level summary + index into the four detail artifacts below"
+
+  - type: dependency-graph
+    template: templates/dependency-graph.md
+    file_pattern: "{slug}.dependency-graph.md"
+    description: "Module/crate/package import graph, external deps, version constraints"
+
+  - type: api-contracts
+    template: templates/api-contracts.md
+    file_pattern: "{slug}.api-contracts.md"
+    description: "Public-API surface: function signatures, REST/gRPC endpoints, exported types"
+
+  - type: unsafe-risk-report
+    template: templates/unsafe-risk-report.md
+    file_pattern: "{slug}.unsafe-risk-report.md"
+    description: "unsafe blocks, FFI calls, raw pointer use, panics, .unwrap() hot spots, dynamic eval"
+
+  - type: tech-debt-inventory
+    template: templates/tech-debt-inventory.md
+    file_pattern: "{slug}.tech-debt-inventory.md"
+    description: "TODO/FIXME/HACK/XXX comments, deprecated API usage, known regressions, dead code candidates"
+
+workflow:
+  initial: scanning
+  states:
+    scanning:
+      # In this state the agent runs the actual extraction commands
+      # (tokei, cargo-deps, ripgrep, ast-grep, etc.) and assembles raw data.
+      transitions:
+        - to: drafting
+          action: data-collected
+    drafting:
+      # In this state the agent writes the five artifacts from raw data.
+      transitions:
+        - to: review
+          action: submit
+          guard: "has_sections:Summary,Bounded Contexts,Domain Glossary,Risk Hotspots;checklist_complete:Extraction Checklist"
+    review:
+      transitions:
+        - to: completed
+          action: approve
+          requires_approval: true
+        - to: drafting
+          action: revise
+    completed:
+      final: true
+
+prompts:
+  scanning: |
+    You are running fact-extractor on a legacy codebase. Your job in this state
+    is to **collect raw data**, not to write artifacts yet.
+
+    Step 1 — Identify the project's primary language(s). Look at file
+    extensions, lockfiles (Cargo.lock, package-lock.json, go.sum, poetry.lock),
+    and build configs (Cargo.toml, package.json, go.mod, pyproject.toml).
+
+    Step 2 — Run language-appropriate analysis tools. Capture stdout. Examples:
+
+      Rust:
+        tokei --output json .
+        cargo metadata --format-version 1
+        cargo tree --prefix depth
+        rg -t rust 'unsafe\s*\{|unsafe\s+fn|unsafe\s+impl' --json
+        rg -t rust '\.unwrap\(\)|\.expect\(' -c
+        rg -tn rust 'pub\s+(fn|struct|enum|trait|type|const|static)' --json
+
+      TypeScript / JavaScript:
+        tokei --output json .
+        npm ls --all --json   (or pnpm list --depth=Infinity --json)
+        rg -t ts 'export\s+(default\s+)?(function|class|interface|type|const)' --json
+        rg -t ts 'eval\(|new Function\(|@ts-ignore|@ts-nocheck' --json
+
+      Python:
+        tokei --output json .
+        pip list --format=json   (or poetry show --tree)
+        rg -t py '^def\s+|^class\s+|^async def\s+' --json
+        rg -t py 'eval\(|exec\(|os\.system\(|subprocess\.shell=True' --json
+
+      Go:
+        tokei --output json .
+        go list -m -json all
+        rg -t go '^func\s+\([^)]+\)|^func\s+[A-Z]' --json
+        rg -t go 'unsafe\.|cgo|panic\(' --json
+
+    Step 3 — Mine **TODO / FIXME / HACK / XXX / NOTE** across all source files:
+
+        rg -i '\b(TODO|FIXME|HACK|XXX|NOTE):' --json --max-count 200
+
+    Step 4 — Capture **commit hotspots** (files changed most often = highest
+    coupling / risk):
+
+        git log --since="1 year ago" --pretty=format: --name-only \
+          | sort | uniq -c | sort -rn | head -50
+
+    Step 5 — Capture **bounded-context hints**: top-level dirs in `src/`,
+    `crates/`, `packages/`, `services/`, `cmd/`, `internal/`. Each top-level
+    dir is usually one bounded context candidate.
+
+    DO NOT write artifacts yet. When raw data is collected, transition
+    to `drafting` with action `data-collected`.
+
+    Full prompt: popsicle prompt fact-extractor --state scanning --run {run_id}
+
+  drafting: |
+    You now have raw extraction data. Write the five artifacts in this order:
+
+      1. dependency-graph        — visual + tabular deps
+      2. api-contracts           — public surface, grouped by bounded context
+      3. unsafe-risk-report      — every risky construct with file:line + reason
+      4. tech-debt-inventory     — TODO/FIXME with file:line + age (git blame)
+      5. fact-extraction-report  — top-level summary linking the four above
+
+    Critical rules:
+
+    - **No editorializing**. fact-extractor is a *recorder*, not a *judge*.
+      Don't write "this code is bad" — write "function `Foo::bar` panics on
+      empty input (src/foo.rs:42)". Downstream skills (rfc-writer, adr-writer)
+      will form opinions; you provide facts.
+
+    - **Cite file:line for every claim**. If a claim has no citation, drop it.
+
+    - **Don't infer intent**. If you see `unsafe` you record it; you do not
+      claim "this should be made safe" unless the comment above explicitly
+      says so. Inferring intent is the LLM's most reliable failure mode and
+      poisons every downstream stage.
+
+    - **Group by bounded context** (the top-level dirs from step 5 above).
+      This is the structure downstream PRD/RFC writers need.
+
+    - **Preserve raw counts**. If `tokei` says 12,431 LoC, write 12,431 — not
+      "around 12k". Numbers carry signal that prose loses.
+
+    Each artifact has a Checklist at the bottom. Tick all boxes before
+    submitting (the workflow guard requires `checklist_complete:Extraction
+    Checklist` in the top-level report).
+
+    Full prompt: popsicle prompt fact-extractor --state drafting --run {run_id}
+
+hooks:
+  on_enter: null
+  on_artifact_created: null
+  on_complete: null

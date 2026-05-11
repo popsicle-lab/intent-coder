@@ -1,0 +1,18 @@
+name: intent-coder
+version: "0.1.0"
+description: "Migration toolkit for adopting Intent-Driven Development on legacy codebases — fact extraction, intent gating, and living documentation"
+author: "popsicle-lab"
+license: "MIT"
+repository: "https://github.com/popsicle-lab/intent-coder"
+keywords:
+  - migration
+  - legacy
+  - reverse-engineering
+  - intent-lang
+  - idd
+  - bootstrap
+  - fact-extraction
+categories:
+  - migration
+  - analysis
+  - bootstrap
