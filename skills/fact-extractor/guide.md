@@ -1,49 +1,49 @@
-# fact-extractor — Writing Guide
+# fact-extractor —— 编写指南
 
-> Audience: the AI agent (you) producing the five fact-extractor artifacts. Read this before writing any artifact.
+> 读者：负责产出 fact-extractor 五个 artifact 的 AI agent（也就是你）。开工写任何 artifact 前先读完本指南。
 
-## Mission
+## 任务
 
-Turn a legacy codebase into a **fact-base** that downstream IDD skills can cite. You are an archaeologist with a notebook and a tape measure, **not** a designer or a critic.
+把一份遗留代码库变成**事实基**，让下游 IDD skill 可以引用。你是带笔记本和卷尺的考古学家，**不是**设计师，**也不是**评论家。
 
-## The Three Anti-Patterns That Ruin a Fact-Base
+## 三个会毁掉事实基的反模式
 
-These are the failure modes that make downstream PRD/RFC writers hallucinate. Avoid them religiously.
+下面三种失败模式会让下游 PRD/RFC writer 产生幻觉。**虔诚地**回避它们。
 
-### 1. **Editorializing**
+### 1. **发表观点**
 
-❌ "The auth module is poorly designed; it mixes concerns."
-✅ "Module `auth` (src/auth/, 1,243 LoC) imports from `db`, `crypto`, and `http`. It exports 14 public functions; 7 of them mutate global state via `lazy_static` (src/auth/state.rs:22)."
+❌ "auth 模块设计糟糕，关注点混杂。"
+✅ "模块 `auth`（src/auth/，1,243 LoC）import 自 `db`、`crypto`、`http`。它导出 14 个公开函数；其中 7 个通过 `lazy_static` 修改全局状态（src/auth/state.rs:22）。"
 
-The first sentence is an opinion masquerading as fact. The second is fact.
+第一句是装成事实的观点。第二句是事实。
 
-### 2. **Inferring intent**
+### 2. **推断意图**
 
-❌ "Function `process_payment` should validate the amount before charging."
-✅ "Function `process_payment(amount: u64) -> Result<Receipt, Error>` (src/payment/process.rs:108): no precondition checks on `amount`; first call is `gateway.charge(amount)` at line 115. TODO comment above says `// TODO: validate amount > 0 before going to prod`."
+❌ "函数 `process_payment` 应该在扣款前校验金额。"
+✅ "函数 `process_payment(amount: u64) -> Result<Receipt, Error>`（src/payment/process.rs:108）：对 `amount` 无前置检查；首个调用是第 115 行的 `gateway.charge(amount)`。其上方 TODO 注释写：`// TODO: validate amount > 0 before going to prod`。"
 
-The first sentence invents a requirement. The second records what the code does *and* records the TODO that hints at the missing requirement — without claiming the TODO is correct.
+第一句凭空发明了一条需求。第二句记录代码所做+TODO 暗示的缺口，但不声称这个 TODO 是对的。
 
-### 3. **Approximating numbers**
+### 3. **数字近似**
 
-❌ "Around 30% of the code is in the `core` crate."
-✅ "tokei reports `core` crate at 4,127 LoC out of 13,508 total (30.5%); see appendix A.1."
+❌ "大约 30% 的代码在 `core` crate 里。"
+✅ "tokei 报告 `core` crate 4,127 LoC，总 13,508 LoC（30.5%）；见 appendix A.1。"
 
-Approximations strip downstream skills of the precision they need to scope work.
+近似会剥夺下游 skill 量化范围所需的精度。
 
-## What Each Artifact Is For (so you know what depth to write at)
+## 每个 artifact 的作用（决定你要写到什么深度）
 
-| Artifact | Consumed By | Implication |
+| Artifact | 谁消费 | 含义 |
 |---|---|---|
-| `dependency-graph.md` | rfc-writer (designs new module boundaries) | Must be machine-readable — include adjacency tables, not just diagrams |
-| `api-contracts.md` | prd-writer (writes "what does this product *do* today?") | Must group by bounded context, not by file |
-| `unsafe-risk-report.md` | safety-spec, invariant-spec | Every entry needs file:line + the surrounding 1-line comment if any |
-| `tech-debt-inventory.md` | adr-writer (records "why we have this debt"), bug-tracker | Each item needs estimated age (use git blame) |
-| `fact-extraction-report.md` | All of the above; entry point | Cross-links to the four detail artifacts; carries the executive summary |
+| `dependency-graph.md` | rfc-writer（设计新模块边界）| 必须**机器可读** —— 含邻接表，不只是图 |
+| `api-contracts.md` | prd-writer（写「这个 product 今天到底做什么」）| 必须按 bounded context 分组，不是按文件 |
+| `unsafe-risk-report.md` | safety-spec、invariant-spec | 每条目要有 file:line + 周围 1 行注释（如有）|
+| `tech-debt-inventory.md` | adr-writer（记录「为什么我们有这笔债」）、bug-tracker | 每条要有估计年龄（用 git blame）|
+| `fact-extraction-report.md` | 上面所有的入口点 | 交叉链接到 4 份详细 artifact；承载 executive summary |
 
-## Quoting Code
+## 引用代码
 
-When quoting code, use fenced blocks tagged with the actual language and **always include the file:line above the block**:
+引用代码时，使用标注真实语言的代码围栏，并**在围栏上方写 file:line**：
 
 ````markdown
 **src/auth/login.rs:42-50**
@@ -55,30 +55,30 @@ pub fn login(user: &str, pass: &str) -> Result<Token, Error> {
 ```
 ````
 
-Quote at most 10 lines per block. If something needs more, link to the file instead.
+每段最多引用 10 行。超过的，链到文件而不是粘进来。
 
-## When You Don't Know Something
+## 当你不知道某件事时
 
-Write **`(unknown — needs human input)`** verbatim. Do **not** guess. Downstream skills will treat that string as a flag and ask the human. Examples where this is the right answer:
+**逐字**写 **`(unknown — needs human input)`**。**不要**猜。下游 skill 把这串字符串当 flag，会去问人。比如：
 
-- The intended SLA of an API endpoint
-- Whether a `panic!` is reachable in production
-- The business reason for a specific magic number
+- 某个 API 端点的预期 SLA
+- 某个 `panic!` 在生产中是否可达
+- 某个魔法数字的业务含义
 
-## When a Tool Fails
+## 当某个工具失败时
 
-Some tools won't be available in every environment (e.g. `cargo metadata` requires Rust toolchain). When a tool fails:
+某些工具不会在每个环境都可用（如 `cargo metadata` 需要 Rust toolchain）。当一个工具失败：
 
-1. Note the failure in the report (`tool: cargo metadata — not available, dependency graph extracted via Cargo.toml inspection only`).
-2. Fall back to a less precise method (e.g. parse Cargo.toml directly).
-3. Flag the resulting artifact section as `[reduced fidelity]`.
+1. 在报告中记录失败（如 `tool: cargo metadata —— 不可用，dependency graph 仅靠解析 Cargo.toml 得到`）。
+2. 降级到精度更低的方法（如直接解析 Cargo.toml）。
+3. 把对应章节标记为 `[reduced fidelity]`。
 
-Never silently substitute one tool for another — downstream consumers need to know what data they're working with.
+**永远不要**悄悄地用另一个工具替换——下游消费者需要知道他们在用什么质量的数据。
 
-## Iteration
+## 迭代
 
-`fact-extractor` is meant to run once per major codebase change. The artifacts it produces are dated baselines, not living documents (that's `living-doc-author`'s job). When in doubt about whether to include something, ask: "would a human reading this 3 months from now still find it useful as a baseline reference?" If yes, include it; if no, drop it.
+`fact-extractor` 设计为代码库重大变化时跑一次。它产出的 artifact 是**带日期的基线**，**不是**活文档（那是 `living-doc-author` 的活）。要不要包含某项内容时，问自己：「3 个月后有人读到这一条，还会觉得它作为基线参考有用吗？」是 → 写；否 → 删。
 
-## Output Format Convention
+## 输出格式约定
 
-Every artifact must end with an `## Extraction Checklist` section. The top-level `fact-extraction-report.md` checklist is the one the workflow guard checks. The four detail artifacts have their own checklists for self-review.
+每个 artifact 必须以 `## Extraction Checklist` 章节结尾。顶层 `fact-extraction-report.md` 的 checklist 是 workflow guard 会检查的那一份。其余 4 份详细 artifact 有各自的 checklist 用于自检。

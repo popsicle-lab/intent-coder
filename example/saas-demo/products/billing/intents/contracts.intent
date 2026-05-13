@@ -1,0 +1,84 @@
+# Contracts — billing
+#
+# Last-Updated: 2026-05-13
+# Last-Decision-Ref: PDR-0001
+#
+# 同 auth/contracts.intent，大段标 [Awaiting ADR-XXXX] 演示 arch-debate hand-off。
+
+# ------------------------------------------------------------------
+# 跨 product：consume auth
+# ------------------------------------------------------------------
+
+contract "consume_verify_session" {
+  pdr       = "PDR-0001"
+  source    = "PDR-0001 § Cross-Product Integration"
+  consumer  = "billing"
+  provider  = "auth"
+
+  # 引用 auth/contracts.intent#verify_session
+  # billing 不重新定义，只声明它的消费契约
+  uses = "auth.contracts.verify_session"
+
+  consumer_requirement {
+    must_check_returned_user_id_matches_request_subject = true
+    must_reject_expired_session = true
+  }
+}
+
+contract "consume_user_signed_up_event" {
+  pdr       = "PDR-0001"
+  source    = "PDR-0001 § Cross-Product Integration + D1"
+  consumer  = "billing"
+  provider  = "auth"
+
+  uses = "auth.contracts.emit_signed_up_event"
+
+  consumer_behavior {
+    # 收到 user.signed_up 事件后 → 立即创建该 account 的 Free Subscription
+    creates = "Subscription(account_id, plan=free, status=active)"
+    idempotency_key = "user_signed_up.{user_id}"   # 重复事件不重复建
+  }
+}
+
+# ------------------------------------------------------------------
+# 外部依赖：Stripe
+# ------------------------------------------------------------------
+
+contract "stripe_webhook_handler" {
+  pdr       = "PDR-0001"
+  source    = "PDR-0001 § Decision (D1, D4)"
+  scope     = "billing-stripe"
+
+  required_events = [
+    "checkout.session.completed",   # T-0001 升级成功
+    "invoice.paid",                  # T-0010 发票同步
+    "invoice.payment_failed",        # T-0020 Dunning 触发
+    "customer.subscription.deleted", # T-0040 期末取消生效
+    "customer.subscription.updated", # T-0030 Seat 调整确认
+  ]
+
+  guarantees = [
+    "no-double-charge",          # idempotency 由 Stripe event_id 保证
+    "single-active-subscription",
+  ]
+
+  implementation = "[Awaiting ADR-XXXX: Webhook Signature Verification + Idempotency Strategy]"
+}
+
+# ------------------------------------------------------------------
+# 内部模块契约（全部 [Awaiting ADR-XXXX]）
+# ------------------------------------------------------------------
+
+contract "subscription_store_interface" {
+  pdr            = "PDR-0001"
+  scope          = "billing-store"
+  guarantees     = ["single-active-subscription"]
+  implementation = "[Awaiting ADR-XXXX: Subscription Storage]"
+}
+
+contract "prorate_calculator" {
+  pdr            = "PDR-0001"
+  scope          = "billing-core"
+  guarantees     = ["prorate-symmetric"]
+  implementation = "[Awaiting ADR-XXXX: Prorate Math Precision (smallest currency unit)]"
+}

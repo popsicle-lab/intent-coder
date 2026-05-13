@@ -1,0 +1,8 @@
+# Contracts — admin-console
+#
+# Status: scaffold-only。所有契约 [Awaiting ADR-XXXX]。
+#
+# 预期消费的 auth / billing 契约（声明，不重定义）:
+# - uses auth.contracts.verify_session
+# - uses auth.contracts.revoke_session_by_admin
+# - uses billing.contracts.query_subscription (待 billing ADR 落地后才能引用)

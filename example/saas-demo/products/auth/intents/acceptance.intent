@@ -1,0 +1,292 @@
+# Acceptance Intents — auth
+#
+# 与 product `auth` 下所有 task_id 一一对应的 acceptance block。
+# 单文件，便于 Z3 跨 block 联合求解。
+#
+# 每个 block 命名约定: <task_id>-<short-description-kebab>
+#
+# Block 必含字段:
+#   - task:           关联的 task_id（单值，与 block 命名一致）
+#   - pdr:            触发本 block 的 PDR ID
+#   - source:         可追溯的来源（PDR 段落 / debate-record 行号）
+#   - journey_stage:  与 task frontmatter 同步
+#   - query_anchors:  与 task「本 task 可解答」摘抄关键问句
+#   - given/when/then: 可被 Z3 形式化的前提/动作/期望
+#
+# Last-Updated: 2026-05-13
+# Last-Decision-Ref: PDR-0001
+
+# ------------------------------------------------------------------
+# Onboarding stage
+# ------------------------------------------------------------------
+
+acceptance "T-0001-signup-completes-in-90s" {
+  task          = "T-0001"
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § Acceptance Criteria #1"
+  journey_stage = "onboarding"
+  query_anchors = [
+    "怎么注册账号？",
+    "注册要多久？"
+  ]
+
+  given {
+    user_state    = "unregistered"
+    has_email     = true
+    has_password  = true  # ≥ 12 chars
+    email_globally_unique = true
+  }
+
+  when {
+    action = "complete_signup_and_email_verify"
+  }
+
+  then {
+    user_state        = "registered_pending_2fa"
+    duration_p50_sec  <= 60
+    duration_p95_sec  <= 90
+    email_verification_sent = true
+    next_screen       = "enable_2fa"   # 必须自动跳，不能停在登录页
+  }
+}
+
+acceptance "T-0002-2fa-recovery-codes-shown-once" {
+  task          = "T-0002"
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § Acceptance Criteria #2 + D2"
+  journey_stage = "onboarding"
+  query_anchors = [
+    "Recovery Code 是什么？",
+    "为什么必须扫码 2FA？"
+  ]
+
+  given {
+    user_state           = "registered_pending_2fa"
+    has_authenticator    = true
+  }
+
+  when {
+    action = "scan_qr_and_verify_first_totp"
+  }
+
+  then {
+    user_state            = "active"
+    totp_enabled          = true
+    recovery_codes_count  = 10
+    recovery_codes_shown_to_user_only_once = true
+    duration_p95_sec      <= 60
+  }
+}
+
+# ------------------------------------------------------------------
+# Daily-Ops stage
+# ------------------------------------------------------------------
+
+acceptance "T-0010-login-p95-under-200ms" {
+  task          = "T-0010"
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § Acceptance Criteria #3 + D1"
+  journey_stage = "daily-ops"
+  query_anchors = [
+    "怎么登录？",
+    "登录有效期多久？"
+  ]
+
+  given {
+    user_state          = "active"
+    password_provided   = true
+    totp_code_provided  = true
+  }
+
+  when {
+    action = "login_with_email_password_and_2fa"
+  }
+
+  then {
+    session_issued           = true
+    session_ttl_days         = 30
+    api_p95_latency_ms       <= 200
+    error_message_does_not_distinguish = "user_not_found vs wrong_password"
+  }
+}
+
+acceptance "T-0010-failed-login-lockout" {
+  task          = "T-0010"
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § Risk Mitigation"
+  journey_stage = "daily-ops"
+  query_anchors = ["我输错密码会怎样？"]
+
+  given {
+    consecutive_wrong_password_attempts = 5
+    window_minutes                       = 60
+  }
+
+  when {
+    action = "attempt_login_again"
+  }
+
+  then {
+    lockout_active    = true
+    lockout_minutes   = 15
+    response_status   = 429
+  }
+}
+
+acceptance "T-0011-oauth-callback-p95-under-500ms" {
+  task          = "T-0011"
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § Acceptance Criteria #4 + D3"
+  journey_stage = "daily-ops"
+  query_anchors = [
+    "能用 Google 登录吗？",
+    "OAuth 比邮箱密码方便吗？"
+  ]
+
+  given {
+    google_account_present   = true
+    google_account_bound     = true  # 首次绑定走简化注册
+    totp_enabled             = true
+  }
+
+  when {
+    action = "click_google_oauth_button"
+  }
+
+  then {
+    session_issued           = true
+    callback_p95_latency_ms  <= 500
+    requires_2fa_step        = true  # OAuth 不豁免 2FA
+  }
+}
+
+# ------------------------------------------------------------------
+# Troubleshooting stage
+# ------------------------------------------------------------------
+
+acceptance "T-0020-recovery-email-arrives-in-60s" {
+  task          = "T-0020"
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § Acceptance Criteria #5"
+  journey_stage = "troubleshooting"
+  query_anchors = [
+    "忘记密码怎么办？",
+    "重置密码邮件多久到？"
+  ]
+
+  given {
+    user_state                   = "active"
+    email_accessible             = true
+    requests_in_last_hour        <= 3
+  }
+
+  when {
+    action = "request_password_reset"
+  }
+
+  then {
+    reset_email_delivery_sec_p95  <= 60
+    reset_token_ttl_minutes       = 30
+    reset_token_single_use        = true
+    all_existing_sessions_revoked_after_reset = true
+    twofa_not_reset_by_this_flow  = true   # 关键安全约束
+  }
+}
+
+acceptance "T-0021-recovery-code-one-time-use" {
+  task          = "T-0021"
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § D2"
+  journey_stage = "troubleshooting"
+  query_anchors = [
+    "2FA 设备丢了怎么办？",
+    "Recovery Code 能用几次？"
+  ]
+
+  given {
+    password_provided        = true   # 第一段身份验证仍走密码
+    recovery_code_provided   = true
+    recovery_code_unused     = true
+  }
+
+  when {
+    action = "use_recovery_code_to_reset_2fa"
+  }
+
+  then {
+    recovery_code_marked_used  = true
+    new_totp_binding_required  = true   # 必须重新扫码绑定
+    alert_email_sent           = true
+  }
+}
+
+# ------------------------------------------------------------------
+# Admin stage
+# ------------------------------------------------------------------
+
+acceptance "T-0030-revoke-takes-effect-in-5s" {
+  task          = "T-0030"
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § Acceptance Criteria #6 + D5"
+  journey_stage = "admin"
+  query_anchors = [
+    "怎么把员工踢下线？",
+    "吊销 Session 多久生效？"
+  ]
+
+  given {
+    actor_role           = "Account Admin"
+    target_user_account  = actor.account  # 同 Account
+    target_user          != actor          # 不能吊销自己
+  }
+
+  when {
+    action = "revoke_all_sessions_of_target_user"
+  }
+
+  then {
+    target_user_session_invalid_within_seconds  <= 5
+    audit_log_entry_written  = true
+    next_target_api_call_returns = 401
+  }
+}
+
+# ------------------------------------------------------------------
+# Lifecycle stage
+# ------------------------------------------------------------------
+
+acceptance "T-0040-deletion-7d-cooldown" {
+  task          = "T-0040"
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § Acceptance Criteria #7 + D6"
+  journey_stage = "lifecycle"
+  query_anchors = [
+    "怎么注销账号？",
+    "注销后还能恢复吗？"
+  ]
+
+  given {
+    user_state                  = "active"
+    outstanding_invoices_count  = 0
+    twofa_recently_verified     = true
+  }
+
+  when {
+    action = "submit_account_deletion_request"
+  }
+
+  then {
+    user_state                       = "pending_deletion"
+    cooldown_days                    = 7
+    all_sessions_revoked_immediately = true
+    can_login_during_cooldown        = true   # 登录后可撤销
+    pii_deleted_at_cooldown_end      = true
+    audit_log_retention_extra_days   = 90     # GDPR
+  }
+}
+
+# Charter Compliance Self-Check (for prd-writer / Z3 sanity):
+# - [x] 每个 acceptance block 都有对应的 task 文件
+# - [x] 每个 task 都至少有一个 acceptance block
+# - [x] block 命名遵守 <task_id>-<kebab> 约定
+# - [x] 所有 source 引用都精确到 PDR 段落

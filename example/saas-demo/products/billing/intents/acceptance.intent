@@ -1,0 +1,129 @@
+# Acceptance Intents — billing
+#
+# Last-Updated: 2026-05-13
+# Last-Decision-Ref: PDR-0001
+
+acceptance "T-0001-upgrade-effective-within-30s" {
+  task          = "T-0001"
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § Acceptance Criteria #1 + D1"
+  journey_stage = "onboarding"
+  query_anchors = ["怎么升级到 Pro？", "升级后多久生效？"]
+
+  given {
+    user_state           = "active"
+    current_plan         = "free"
+    twofa_recently_verified = true
+  }
+
+  when {
+    action = "complete_stripe_checkout"
+  }
+
+  then {
+    new_plan                       = "pro"
+    subscription_status            = "active"
+    activation_delay_sec_p95       <= 30
+    saas_server_sees_card_number   = false   # 卡号永不入本 SaaS
+  }
+}
+
+acceptance "T-0010-invoice-list-correct" {
+  task          = "T-0010"
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § Acceptance Criteria #2"
+  journey_stage = "daily-ops"
+  query_anchors = ["我的下次扣费是什么时候？", "我能下载发票吗？"]
+
+  given { current_plan in ["pro", "team"] }
+  when  { action = "load_invoice_page" }
+  then {
+    invoice_amount_matches_stripe = true
+    next_charge_date_equals_current_period_end = true
+    pdf_download_link_present     = true
+  }
+}
+
+acceptance "T-0011-payment-method-updated" {
+  task          = "T-0011"
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § D3"
+  journey_stage = "daily-ops"
+  query_anchors = ["怎么换信用卡？"]
+
+  given { current_plan in ["pro", "team"] }
+  when  { action = "submit_new_card_via_stripe_elements" }
+  then {
+    default_payment_method_updated = true
+    no_plaintext_card_in_saas      = true
+    next_billing_date_unchanged    = true
+  }
+}
+
+acceptance "T-0020-dunning-retry-schedule" {
+  task          = "T-0020"
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § D4"
+  journey_stage = "troubleshooting"
+  query_anchors = ["重试几次？", "扣费失败会自动重试吗？"]
+
+  given { invoice_status = "payment_failed" }
+  when  { action = "let_dunning_run" }
+  then {
+    retry_intervals_days = [1, 3, 7]
+    total_attempts       = 4   # 原次 + 3 次重试
+  }
+}
+
+acceptance "T-0020-downgrade-on-3rd-failure" {
+  task          = "T-0020"
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § D4"
+  journey_stage = "troubleshooting"
+  query_anchors = ["重试都失败会被停服吗？"]
+
+  given { consecutive_failed_attempts = 4 }
+  when  { action = "stripe_marks_subscription_unpaid" }
+  then {
+    plan_downgraded_to       = "free"
+    data_retained            = true
+    user_can_re_upgrade      = true
+  }
+}
+
+acceptance "T-0030-seat-prorate-correct" {
+  task          = "T-0030"
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § D5"
+  journey_stage = "admin"
+  query_anchors = ["Seat prorate 怎么算？"]
+
+  given {
+    plan = "team"
+    actor_role = "Account Admin"
+    delta_seats in [-20, 20]
+  }
+  when { action = "adjust_seats(delta)" }
+  then {
+    stripe_invoice_prorate_amount_signs_match_delta = true
+    increase_prorate_amount      == abs(decrease_prorate_amount)  # 对称
+  }
+}
+
+acceptance "T-0040-cancel-effective-at-period-end" {
+  task          = "T-0040"
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § D6"
+  journey_stage = "lifecycle"
+  query_anchors = ["取消后立即停服吗？", "已付的钱退吗？"]
+
+  given { current_plan in ["pro", "team"] }
+  when  { action = "submit_cancel_subscription" }
+  then {
+    immediate_revoke_access       = false   # 不立即停
+    cancel_at_period_end          = true
+    refund_for_current_period     = false
+    auto_downgrade_to_free        = true   # 期末
+    user_can_undo_within_period   = true
+  }
+}

@@ -1,0 +1,7 @@
+# Invariants — admin-console
+#
+# Status: scaffold-only。
+# 预期 invariants（待 PDR 落地确认）:
+# - cross-account-query-requires-audit: 跨 Account 查询必写 audit log
+# - admin-cannot-elevate-self: Admin 不能给自己加权限
+# - super-admin-2-of-N-approval: 高敏操作需 N-of-M 二次确认

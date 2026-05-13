@@ -1,72 +1,72 @@
 # Doc Architecture Charter — {repo_name}
 
-> **Promoted to**: `docs/CHARTER.md` after scaffolding
-> **Status**: foundational — changing this charter requires its own ADR
+> **Promoted to**: `docs/CHARTER.md`，骨架铺好后
+> **Status**: 基础性——修改本 charter 需要它自己的 ADR
 
-This charter defines the non-negotiable rules of how documentation is organized, written, and changed in this repository. Every contributor — human and AI agent — reads this before touching `docs/`, `products/*/PRODUCT.md`, `products/*/ARCHITECTURE.md`, or any decision file.
+本 charter 定义本仓库**文档如何组织、如何编写、如何变更**的不可妥协规则。每个贡献者——人或 AI agent——在动 `docs/`、`products/*/PRODUCT.md`、`products/*/ARCHITECTURE.md` 或任何决策文件之前，都要先读这份。
 
 ---
 
-## The Four Iron Laws of the Doc System
+## 文档体系的四条铁律
 
-1. **Living docs have no version number** — only `Last-Updated` and `Last-Decision-Ref`. They always represent NOW. Outdated content is fixed in place; no historical narrative.
-2. **The decision archive is append-only** — ADR/PDR files are never modified after `Status: Accepted`. Wrong decisions are corrected by writing a NEW decision that Supersedes them.
-3. **Every living-doc edit must reference a decision ID** (except typo / link / wording fixes). CI enforces this on PRs touching `PRODUCT.md` or `ARCHITECTURE.md`.
-4. **One change can touch many living docs** — the triggering ADR/PDR's `Consequences` section MUST list every living-doc section it forces an update to; the PR must update them all in one go.
+1. **活文档没有版本号** —— 只有 `Last-Updated` 和 `Last-Decision-Ref`。它们永远代表「现在」。过期内容就地修正；不写历史叙事。
+2. **决策档案只追加** —— ADR/PDR 文件在 `Status: Accepted` 之后永不修改。错的决策通过写一份**新**决策（标注 Supersedes）来纠正。
+3. **每次活文档编辑必须引用一个 Decision ID**（除错别字 / 链接 / 措辞修复外）。改 `PRODUCT.md` 或 `ARCHITECTURE.md` 的 PR 由 CI 强制。
+4. **一次变更可能波及多份活文档** —— 触发它的 ADR/PDR 的 `Consequences` 章节**必须**列出所有被它强制更新的活文档段落；PR 必须在一次提交里全部更新。
 
 ---
 
 ## Layer Map
 
-The doc system has 7 layers, distinguished by **what they constrain** and **how often they change**.
+文档体系分 7 层，由**它们约束什么**和**多久变一次**来区分。
 
-| Layer | Document | Constraint Object | Change Frequency | Owner | intent-lang |
+| Layer | 文档 | 约束对象 | 变更频率 | Owner | intent-lang |
 |---|---|---|---|---|---|
-| L0 | `docs/CHARTER.md`, `docs/charter.md` | The product's reason to exist; absolute floors | yearly | founders / arch committee | natural language only |
-| L1 | `docs/invariants/*.intent`, `products/*/intents/invariants.intent` | Domain rules of nature | quarterly | PM + architect | ✅ core |
-| L2 | `products/*/PRODUCT.md` + `acceptance.intent` | User-visible behavior | monthly | PM | ✅ acceptance fragment |
-| L3 | `products/*/decisions/{adr,pdr}/*.md` | Why a specific choice was made | frozen at decision time, never modified | architect / PM | ❌ |
-| L4 | `products/*/ARCHITECTURE.md` + `contracts.intent` | How a module is implemented | proposal-mutable, frozen on landing | tech lead | ✅ contracts fragment |
-| L5 | `migration/slices/*.md`, change PRs | One specific change | one-shot | developer | ✅ as diff |
-| L6 | `crates/`, `src/`, `tests/` | Machine behavior | continuous | AI + human | — |
+| L0 | `docs/CHARTER.md` | 产品存在的理由；绝对底线 | 一年级 | 创始人 / 架构委员会 | 仅自然语言 |
+| L1 | `docs/invariants/*.intent`, `products/*/intents/invariants.intent` | 领域自然律 | 一季度 | PM + 架构师 | ✅ 核心 |
+| L2 | `products/*/PRODUCT.md` + `acceptance.intent` | 用户可见行为 | 一月 | PM | ✅ acceptance 片段 |
+| L3 | `products/*/decisions/{adr,pdr}/*.md` | 为什么这么选 | 决策时定，永不修改 | 架构师 / PM | ❌ |
+| L4 | `products/*/ARCHITECTURE.md` + `contracts.intent` | 模块如何实现 | 提案期可变，落地即冻结 | 技术 lead | ✅ contracts 片段 |
+| L5 | `migration/slices/*.md`、变更 PR | 一次具体变更 | 一次性 | 开发者 | ✅ 以 diff 形式 |
+| L6 | `crates/`、`src/`、`tests/` | 机器行为 | 持续 | AI + 人 | — |
 
-> Misuse to avoid: a "PRD" that mixes L1 invariants, L2 product spec, and L4 contracts in one document is the #1 cause of large-project doc rot. Each layer changes at a different rate; mixing them forces all of them to the highest rate.
+> 必须避免的滥用：一份 "PRD" 把 L1 invariant、L2 product spec、L4 contract 混在一份文档里，是大项目文档腐烂 #1 的成因。每一层变更频率不同；混层强行把所有层拉到最高频率。
 
 ---
 
 ## Per-Product 4-Piece Set
 
-Every product (under `products/<name>/`) has exactly four kinds of artifact. Each has a defined audience, a defined update method, and **a defined list of what NOT to write here**.
+每一个 product（在 `products/<name>/` 之下）正好有 4 类制品。每一类有定义好的 audience、定义好的更新方式、**以及定义好的「不准在这里写什么」清单**。
 
-| Piece | View | Audience | Update Method | What NOT to write here |
+| 制品 | 视角 | Audience | 更新方式 | 不准在这里写什么 |
 |---|---|---|---|---|
-| `PRODUCT.md` | business | PM, sales, customer success, AI | direct edit (small) or PDR-triggered (large) | implementation details, technical selection rationale |
-| `ARCHITECTURE.md` | implementation | engineers, AI | direct edit (small) or ADR-triggered (large) | business strategy, pricing, customer segmentation |
-| `intents/*.intent` | formal | LLM, Z3, CI | follows PRODUCT.md / ARCHITECTURE.md changes | natural-language narrative, rationale (those go in PDR/ADR) |
-| `decisions/{adr,pdr}/*` | history | anyone tracing a decision | append-only | "current state" descriptions (those go in living docs) |
+| `PRODUCT.md` | 商业 | PM、销售、客户成功、AI | 直接编辑（小改）或 PDR 触发（大改）| 实现细节、技术选型理由 |
+| `ARCHITECTURE.md` | 实现 | 工程师、AI | 直接编辑（小改）或 ADR 触发（大改）| 商业策略、定价、客户分层 |
+| `intents/*.intent` | 形式化 | LLM、Z3、CI | 跟随 PRODUCT.md / ARCHITECTURE.md 的变化 | 自然语言叙述、理由（这些放进 PDR/ADR）|
+| `decisions/{adr,pdr}/*` | 历史 | 任何追溯决策的人 | 只追加 | "当前状态"描述（放活文档里）|
 
 ---
 
-## Three-Layer Intent Hierarchy
+## 三层 Intent 体系
 
-| Scope | Path | Owner | Triggered By |
+| 作用域 | 路径 | Owner | 触发 |
 |---|---|---|---|
-| **Cross-product (global)** | `docs/invariants/*.intent` | charter-level decisions | "constitutional" PDR (rare) |
-| **Single product** | `products/<name>/intents/invariants.intent` | product team | PDR within that product |
-| **Single feature / acceptance** | `products/<name>/intents/acceptance.intent` | product team | PDR within that product |
-| **Single contract / module API** | `products/<name>/intents/contracts.intent` | architect | ADR within that product |
+| **跨 product（全局）** | `docs/invariants/*.intent` | charter 级别的决定 | "宪法级" PDR（罕见）|
+| **单个 product** | `products/<name>/intents/invariants.intent` | product team | product 内部的 PDR |
+| **单个 feature / acceptance** | `products/<name>/intents/acceptance.intent` | product team | product 内部的 PDR |
+| **单个 contract / 模块 API** | `products/<name>/intents/contracts.intent` | 架构师 | product 内部的 ADR |
 
-> Rule: every PDR/ADR's `Intent Impact` section must name which layer of intent it modifies. CI rejects decisions that don't.
+> 规则：每份 PDR/ADR 的 `Intent Impact` 章节必须指出它修改的是哪一层 intent。CI 拒绝缺这一项的决策。
 
 ---
 
-## Proposal & Decision Lifecycles
+## 提案 & 决策生命周期
 
-### Technical side (RFC → ADR)
+### 技术侧（RFC → ADR）
 
 ```
 ┌─────────┐    accept    ┌──────────┐
-│Proposed │ ───────────► │ Accepted │ (immutable)
+│Proposed │ ───────────► │ Accepted │ （不可变）
 └─────────┘              └────┬─────┘
      │                        │ supersede
      │ reject                 ▼
@@ -76,7 +76,7 @@ Every product (under `products/<name>/`) has exactly four kinds of artifact. Eac
 └──────────┘
 ```
 
-### Product side (PRFC → PDR)
+### Product 侧（PRFC → PDR）
 
 ```
 ┌──────────┐  ready   ┌──────────┐  accept  ┌──────────┐
@@ -90,13 +90,13 @@ Every product (under `products/<name>/`) has exactly four kinds of artifact. Eac
 └──────────┘          └──────────┘
 ```
 
-> **Why the product side has `Exploring` and the tech side does not**: technical RFCs are submitted when the author already knows the direction and is selecting between alternatives. Product proposals often start as "should we even do this?" and need a research period (user interviews, data analysis, A/B tests) before a real proposal can be written. `Exploring` carries an `Decision-Deadline:` field — at deadline it MUST advance to `Proposed` or `Rejected`. This prevents two failure modes: (a) embryonic ideas polluting the proposal queue if forced to start as `Proposed`, (b) loss of audit trail if exploratory work happens entirely off-record.
+> **为什么 product 侧多了 `Exploring` 而技术侧没有**：技术 RFC 是作者已经知道方向、在备选方案之间选择时提交的。产品提案常常起源于「我们到底要不要做这件事」，需要一段研究期（用户访谈、数据分析、A/B 测试）才能写出真正的提案。`Exploring` 带一个 `Decision-Deadline:` 字段——到期必须进入 `Proposed` 或 `Rejected`。这避免两种失败模式：(a) 强行让胚胎期想法以 `Proposed` 起步，污染提案队列；(b) 让探索性工作完全在档案之外发生，丢失审计轨迹。
 
 ---
 
-## Forbidden Phrases in Living Docs
+## 活文档中的禁用短语
 
-If a living doc (`PRODUCT.md`, `ARCHITECTURE.md`) contains any of these phrases, the PR fails review:
+如果某份活文档（`PRODUCT.md`、`ARCHITECTURE.md`）含有以下任一短语，PR 评审不通过：
 
 - "We originally used X..."
 - "Previously, ..."
@@ -104,40 +104,40 @@ If a living doc (`PRODUCT.md`, `ARCHITECTURE.md`) contains any of these phrases,
 - "We migrated from X to Y because..."
 - "Was: X. Now: Y."
 
-These phrases describe **history**, which is the job of ADR / PDR / `git log`. Living docs use **present tense only**.
+这些短语描述**历史**，而历史是 ADR / PDR / `git log` 的活。活文档**只用现在时**。
 
 ✅ `"Replication: Multi-Paxos [ADR-0015]"`
 ❌ `"We initially used Raft, then changed to Multi-Paxos in 2026 to reduce cross-region latency"`
 
 ---
 
-## Anti-Patterns (and how to detect them)
+## 反模式（以及如何检测）
 
-| Anti-pattern | Detection | Mitigation |
+| 反模式 | 检测方式 | 缓解 |
 |---|---|---|
-| **Living docs as wiki** — anyone adds a section, structure rots | template-conformance check on PRs touching PRODUCT.md / ARCHITECTURE.md | every living-doc has a fixed top-level outline; new sections require a charter amendment |
-| **ADR/PDR as diary** — daily standup notes filed as decisions | reviewer asks "would this still matter in 1 year?" before merge | `decisions/` folder PRs need 2 reviewers; trivia goes in issue/PR description |
-| **Per-microservice splits** — one product becomes 20 separate `products/` dirs | repo-wide check: a product with > 5 sub-products is split | products are drawn at customer-recognizable boundaries, not code-module boundaries |
-| **Roadmap as wishlist** — "Committed Roadmap" lists ideas without PDR | grep `PRODUCT.md`'s Roadmap section for entries lacking `[PDR-XXXX]` | roadmap entries without a Decision ID are invalid; ideas live in `proposals/exploring/` |
-| **Doc–code drift** — living docs go stale | CI checks `Last-Updated` field; warns at N days; PRs touching `crates/<X>/` must confirm whether `products/<X>/ARCHITECTURE.md` needs an update | linter; explicit PR template question |
+| **活文档当 wiki** —— 任何人都加章节，结构腐烂 | PR 改 PRODUCT.md / ARCHITECTURE.md 时做模板符合性检查 | 每份活文档有固定的顶层大纲；加新章节需要 charter 修订 |
+| **ADR/PDR 当日记** —— 日常 standup 笔记被记成决策 | 评审者在 merge 前问「这件事一年后还重要吗」 | `decisions/` 目录的 PR 需要 2 个评审者；琐碎信息进 issue / PR description |
+| **每个微服务一个 product** —— 一个 product 被切成 20 个 `products/` 目录 | 仓库级检查：一个 product 有 > 5 个子 product 就要拆 | Product 边界画在客户能识别的位置，不是代码模块边界 |
+| **Roadmap 当愿望清单** —— "Committed Roadmap" 列了一堆没 PDR 的想法 | grep `PRODUCT.md` 的 Roadmap 章节，找没有 `[PDR-XXXX]` 的条目 | 没有 Decision ID 的 roadmap 条目无效；想法住在 `proposals/exploring/` |
+| **Doc–code drift** —— 活文档变陈旧 | CI 检查 `Last-Updated` 字段；N 天后告警；改 `crates/<X>/` 的 PR 必须确认 `products/<X>/ARCHITECTURE.md` 是否要更新 | linter；PR 模板里显式提问 |
 
 ---
 
-## Migration Sequence (for adopting this charter on a legacy project)
+## 迁移序列（把本 charter 套到一份遗留项目上）
 
-> Replicates the source-discussion §七 sequence; do not re-invent.
+> 复刻来源讨论 §七 的序列；不要重发明。
 
-| Step | Action | When complete |
+| 步骤 | 动作 | 何时完成 |
 |---|---|---|
-| 0 | Build empty 4-piece scaffold for each product | this skill (`project-init`) |
-| 1 | Write current snapshot of each `PRODUCT.md` + `ARCHITECTURE.md` (with `[TBD: needs archaeology]` markers) | first slice's PM/tech-lead pair, ~2-3 weeks |
-| 2 | Lazily backfill ADR/PDR — only when a `[TBD]` is hit or a new decision touches old territory; `Status: Reconstructed` | continuous |
-| 3 | From a fixed cutover date: every living-doc PR requires a Decision ID | CI enforced |
-| 4 | Add intent layer — each PDR/ADR gains an `Intent Impact` section | post-charter, parallel to step 3 |
-| 5 | Acceptance/contracts intents grow per product; first slice produces the playbook | continuous |
+| 0 | 为每个 product 铺空的 4 件套骨架 | 本 skill（`project-init`）|
+| 1 | 为每份 `PRODUCT.md` + `ARCHITECTURE.md` 写当前快照（含 `[TBD: needs archaeology]` 标记）| 首切片的 PM / 技术 lead，约 2-3 周 |
+| 2 | 懒回填 ADR/PDR —— 只在撞到 `[TBD]` 或新决策触及老地盘时回填；`Status: Reconstructed` | 持续 |
+| 3 | 从某个固定的 cutover date 起：每次活文档 PR 都需要 Decision ID | CI 强制 |
+| 4 | 加 intent 层 —— 每份 PDR/ADR 长出 `Intent Impact` 章节 | charter 落地后，与 step 3 并行 |
+| 5 | acceptance/contracts intent 按 product 长起来；首切片产出 playbook | 持续 |
 
 ---
 
-## Charter Self-Reference
+## Charter 自指
 
-This charter is itself a living doc. Changes to it require a special class of decision: a **CADR** (Charter Amendment Decision Record) at `docs/decisions/cadr/`. CADRs are subject to the Four Iron Laws like any other decision file.
+本 charter 本身就是一份活文档。修改它需要一类特殊的决策：**CADR**（Charter Amendment Decision Record），位于 `docs/decisions/cadr/`。CADR 与其它决策文件一样受四条铁律约束。

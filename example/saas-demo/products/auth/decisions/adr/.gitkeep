@@ -1,0 +1,3 @@
+# ADR (Architecture Decision Records) live here.
+# Empty in demo — arch-debate / rfc-writer modules are intentionally not installed.
+# ADR-0001 ~ ADR-0005 are referenced by contracts.intent as [Awaiting ADR-XXXX].

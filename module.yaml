@@ -1,6 +1,6 @@
 name: intent-coder
-version: "0.1.0"
-description: "Migration toolkit for adopting Intent-Driven Development on legacy codebases — fact extraction, intent gating, and living documentation"
+version: "0.3.0"
+description: "遗留代码库适配 IDD（意图驱动开发）的迁移工具箱——骨架铺设、事实抽取、产品辩论、PRD 任务图、intent 闸门、活文档维护。v0.3 引入「以任务和意图为中心」的 AI 时代 PRD 范式：PRD 拆解为按 5 个用户旅程阶段组织的 task chunk，每个 chunk 自带 YAML frontmatter，可被 AI 独立召回。自带 .intent DSL 与 Z3 验证，技术侧（架构 / RFC / ADR / intent 语法收紧）保持开放。"
 author: "popsicle-lab"
 license: "MIT"
 repository: "https://github.com/popsicle-lab/intent-coder"
@@ -12,7 +12,14 @@ keywords:
   - idd
   - bootstrap
   - fact-extraction
+  - product-debate
+  - prd
+  - pdr
+  - task-graph
+  - ai-native-docs
 categories:
   - migration
   - analysis
   - bootstrap
+  - product
+  - documentation

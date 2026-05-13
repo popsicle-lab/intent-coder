@@ -1,0 +1,121 @@
+# Contracts — auth
+#
+# 模块间接口的形式化定义。本文件的大部分 block 标 `[Awaiting ADR-XXXX]`——
+# arch-debate / rfc-writer 模块落地相应 ADR 后才能收紧。
+#
+# 注：本 demo 故意不装 arch-debate 模块，所以本文件大段空白。这是「契约位」
+# 的典型展示。
+#
+# Last-Updated: 2026-05-13
+# Last-Decision-Ref: PDR-0001 (跨 product 调用契约)
+
+# ------------------------------------------------------------------
+# 跨 product RPC：供 billing / admin-console 消费
+# ------------------------------------------------------------------
+
+contract "verify_session" {
+  pdr      = "PDR-0001"
+  source   = "PDR-0001 § Cross-Product Integration"
+  consumer = ["billing", "admin-console"]
+  provider = "auth"
+
+  # 接口签名（语义层，技术形式 [Awaiting ADR-XXXX]）
+  signature {
+    input  = "session_token: String"
+    output = "Option<UserContext { user_id, account_id, expires_at }>"
+  }
+
+  # invariants 引用
+  guarantees [
+    "session-isolation",
+    "no-plaintext-password",  # token 在比对时不还原密码
+  ]
+
+  # 性能要求（来自 PRD § Success Metrics）
+  performance {
+    p95_latency_ms <= 50
+    qps_capacity   >= 10000
+  }
+
+  # 技术形式
+  implementation = "[Awaiting ADR-0003: Session Storage Selection]"
+}
+
+contract "revoke_session_by_admin" {
+  pdr      = "PDR-0001"
+  source   = "PDR-0001 § Decision (D5)"
+  consumer = ["admin-console"]
+  provider = "auth"
+
+  signature {
+    input  = "admin_id: UUID, target_user_id: UUID, reason: String"
+    output = "Result<RevocationReceipt>"
+  }
+
+  guarantees ["no-self-revoke"]
+
+  implementation = "[Awaiting ADR-0004: Audit Log Storage]"
+}
+
+contract "emit_signed_up_event" {
+  pdr      = "PDR-0001"
+  source   = "PDR-0001 § Cross-Product Integration"
+  consumer = ["billing"]
+  provider = "auth"
+
+  # billing 监听此事件以创建 Free 订阅（J-0001 Stage 4）
+  schema = """
+    event user.signed_up {
+      user_id: UUID
+      account_id: UUID
+      email: String
+      signed_up_at: Timestamp
+    }
+  """
+
+  implementation = "[Awaiting ADR-XXXX: Event Bus Selection]"
+}
+
+# ------------------------------------------------------------------
+# 内部模块契约（auth-api / auth-core / auth-store / auth-audit）
+# ------------------------------------------------------------------
+
+# 以下全部 [Awaiting ADR-XXXX]，演示 hand-off
+
+contract "password_hashing_function" {
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § Security Invariants"
+  scope         = "auth-core"
+  guarantees    = ["no-plaintext-password"]
+  implementation = "[Awaiting ADR-0001: Password Hashing Algorithm Selection]"
+}
+
+contract "totp_verification_function" {
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § Decision (D2)"
+  scope         = "auth-core"
+  guarantees    = ["2fa-required-after-onboarding"]
+  implementation = "[Awaiting ADR-0002: TOTP Library Selection]"
+}
+
+contract "session_store_interface" {
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § Decision (D1)"
+  scope         = "auth-store"
+  guarantees    = ["session-isolation"]
+  performance   = "p95 read ≤ 5ms, write ≤ 10ms"
+  implementation = "[Awaiting ADR-0003: Session Storage Selection]"
+}
+
+contract "audit_log_writer" {
+  pdr           = "PDR-0001"
+  source        = "PDR-0001 § Compliance Constraints"
+  scope         = "auth-audit"
+  guarantees    = ["audit-log-retention"]
+  implementation = "[Awaiting ADR-0005: Audit Log Storage]"
+}
+
+# Charter Compliance Self-Check:
+# - [x] 每个 contract 都标了 PDR 来源 + scope（哪个模块或跨 product）
+# - [x] 内部 contracts 全部明确标 `[Awaiting ADR-XXXX]` —— 不允许偷偷写完
+# - [x] 跨 product contract 即使没有 ADR，也明确了 consumer / provider / 性能边界

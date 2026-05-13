@@ -1,0 +1,24 @@
+name: saas-demo
+version: "0.1.0"
+description: "intent-coder v0.3 任务图范式的端到端 demo 项目——一个典型 SaaS 应用，含 auth（登录注册）+ billing（订阅计费）+ admin-console（管理后台）三个 product。本项目演示从 project-init 铺骨架、product-debate 跨角色辩论、prd-writer 产出任务图五件套到 PDR / acceptance.intent 落地的完整 IDD 工作流。"
+author: "intent-coder demo"
+license: "MIT"
+keywords:
+  - demo
+  - example
+  - saas
+  - auth
+  - billing
+  - task-graph
+  - idd
+
+# 依赖 intent-coder 主模块（相对路径，仅 demo 用）
+dependencies:
+  - path: ../..
+    name: intent-coder
+
+# 默认 agent target
+default_agent: claude
+
+# Issue key 前缀（用于 BUG-SAAS-1、TC-SAAS-1 ...）
+issue_key_prefix: SAAS

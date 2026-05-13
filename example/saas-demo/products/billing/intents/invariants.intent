@@ -1,0 +1,51 @@
+# Invariants — billing
+#
+# Last-Updated: 2026-05-13
+# Last-Decision-Ref: PDR-0001
+
+invariant "single-active-subscription" {
+  pdr     = "PDR-0001"
+  source  = "PDR-0001 § Decision (D1) (候选升格为 docs/invariants/)"
+  scope   = "product:billing"
+
+  forall account in accounts {
+    count(account.subscriptions where status == "active") <= 1
+  }
+}
+
+invariant "no-double-charge" {
+  pdr     = "PDR-0001"
+  source  = "PDR-0001 § D4 + Security Invariants"
+  scope   = "product:billing"
+
+  forall sub in subscriptions, period in sub.billing_periods {
+    count(charges where charges.subscription == sub
+          and charges.period == period
+          and charges.status == "succeeded") <= 1
+  }
+}
+
+invariant "prorate-symmetric" {
+  pdr     = "PDR-0001"
+  source  = "PDR-0001 § D5"
+  scope   = "product:billing"
+
+  # 周期内增 X seat 立即扣 K 元 ⇔ 同周期减 X seat 退 K 元
+  forall increase_op, decrease_op in seat_changes
+    where increase_op.delta_seats == abs(decrease_op.delta_seats)
+      and increase_op.period == decrease_op.period {
+    abs(increase_op.prorate_amount) == abs(decrease_op.prorate_amount)
+  }
+}
+
+invariant "no-plaintext-card-number" {
+  pdr     = "PDR-0001"
+  source  = "PDR-0001 § Security Invariants + D3"
+  scope   = "product:billing"
+
+  forall t in time, p in process, s in store {
+    user.card_number_plaintext not in p.memory_dump
+    user.card_number_plaintext not in s.disk_persisted
+    user.card_number_plaintext not in log_entries
+  }
+}

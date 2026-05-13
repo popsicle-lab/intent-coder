@@ -1,81 +1,81 @@
-# project-init — Writing Guide
+# project-init —— 编写指南
 
-> Audience: the AI agent (you) running the project-init skill. Read this **and the source discussion at `docs/source-discussions/idd-doc-migration.md` (if present)** before starting.
+> 读者：跑 project-init skill 的 AI agent（也就是你）。开工前先读完本指南，**以及** `docs/source-discussions/idd-doc-migration.md`（如有）。
 
-## Mission
+## 任务
 
-Lay down the **doc-architecture stage** so that downstream skills (fact-extractor, prd-writer, rfc-writer, intent-spec writers) all write into well-defined slots. Get this wrong and every downstream skill silently degrades.
+铺出**文档体系的舞台**，让下游所有 skill（fact-extractor、PRD writer、RFC writer、intent spec writer，无论是 intent-coder 自家的还是用户外接的）都写进定义良好的位置。这一步搞砸，下游每一个 skill 都会悄悄退化。
 
-## The One Decision That Matters Most: Product Naming
+## 唯一最重要的决定：Product 命名
 
-Everything else can be fixed by re-running a skill. **Product naming cannot** — it bakes into the directory structure, into git history, and into every cross-reference downstream documents make. If you only get one decision right, get this one.
+其它东西都能靠重跑 skill 修复。**Product 命名不行**——它会烙进目录结构、烙进 git 历史、烙进每一份下游文档的交叉引用。如果你只能做对一个决定，做对这个。
 
-### Hard rules
+### 硬规则
 
-1. **Products are customer-recognizable**, not internal modules. Customers don't say "I use the `core` crate"; they say "I use the database product."
-2. **3 to 7 products**. Fewer than 3 → likely under-decomposed. More than 7 → either you're listing modules instead of products, or the project is genuinely sprawling and you should ask the human to confirm.
-3. **No catch-all "common" / "shared" / "utils" products**. If something doesn't belong to any product, it's a candidate for `docs/invariants/` (cross-cutting) or `crates/common/` (code-level shared lib, not a product).
-4. **Products map to bounded contexts**, which `fact-extractor` already extracts. Use that table; don't re-derive.
+1. **Product 是客户能识别的**，不是内部模块。客户不会说「我用 `core` crate」，他们会说「我用 database 这个 product」。
+2. **3 到 7 个 product**。少于 3 → 多半分解不够。多于 7 → 要么你把模块当成 product 在列，要么这个项目确实庞杂——找人类确认。
+3. **不允许 "common" / "shared" / "utils" 这种万能 product**。如果某个东西不属于任何 product，它是 `docs/invariants/` 候选（跨切面）或 `crates/common/` 候选（代码级共享库，不是 product）。
+4. **Product 对应 bounded context**，而这一层 `fact-extractor` 已经抽出来了。用那张表，**别重新推一遍**。
 
-### Soft signals for "is this a product?"
+### 软信号 ——「这是不是一个 product」
 
-- Does it have its own customer-facing surface (CLI, API, UI)?
-- Could you imagine a sales conversation about it standalone?
-- Does it have a roadmap distinct from its peers?
+- 它有自己的对客户暴露的入口吗（CLI、API、UI）？
+- 你能想象一场单独围绕它的销售对话吗？
+- 它有跟同侪不同的路线图吗？
 
-If yes to any → it's a product. If no to all → it's a module belonging to some other product.
+任何一项为 yes → 它是 product。全为 no → 它是某个 product 的下属模块。
 
-## The Other Decision That Matters: First Migration Slice
+## 第二重要的决定：首个迁移切片
 
-Per the source discussion §六 (具体建议):
-- ROI by domain varies wildly (database/network high, simulation medium, viz low)
-- Pick a product with **high ROI + medium criticality + few reverse deps**
-- Document **at least one alternative** considered, with reasons rejected
+按来源讨论 §六（具体建议）：
+- 不同领域的 ROI 差异巨大（database/network 高、simulation 中、viz 低）
+- 挑**高 ROI + 中等关键度 + 反向依赖少**的 product
+- **至少**记录一个被否决的替代选项，附理由
 
-The slice you pick will become the **playbook** other products copy. So:
-- Don't pick the most critical (too risky for a first run)
-- Don't pick the smallest (won't generate enough patterns)
-- Don't pick the most isolated (other slices won't be analogous)
+你挑的这一片会变成其它 product 抄的 **playbook**。所以：
+- 别挑最关键的（首跑风险太大）
+- 别挑最小的（生不出足够多的模式）
+- 别挑最孤立的（其它片照不进它的模式）
 
-## What "Skeleton" Means
+## "Skeleton" 是什么意思
 
-**Every** file you create in the scaffolding state contains either:
-- The template's default text (placeholders like `{product-name}`)
-- `[TBD: needs archaeology]` where a real value would normally go
+你在 scaffolding 状态创建的**每一个**文件，要么含有：
+- 模板的默认文本（`{product-name}` 这种占位符）
+- 在任何本该放真实值的地方放 `[TBD: needs archaeology]`
 
-You **must not** invent content. The temptation is real — you have a fact-extraction-report; you could draft a passable PRODUCT.md from it. **Don't.** That's `prd-writer`'s job. Stay in your lane: structure, not content.
+你**不能**编造内容。诱惑是真的——你手上有 fact-extraction-report，你能起草一份过得去的 PRODUCT.md。**忍住。** 那是 PRD writer 的活。**待在你这一层：结构，不是内容。**
 
-The one exception: `docs/CHARTER.md` is content, but it's content the user has already locked in (the Four Iron Laws). You promote it verbatim from the planning artifact.
+唯一的例外：`docs/CHARTER.md` 是内容，但它是用户已经锁定的内容（四条铁律）。你从 planning artifact 里**逐字**提升它过去。
 
-## Why the Plan Is Reviewed Before Scaffolding
+## 为什么计划要先评审再铺骨架
 
-Two reasons:
-1. **Reversibility cliff** — once `git submodule add` runs and `popsicle init` runs, you've made changes that are annoying (not impossible, but annoying) to undo. Catch mistakes in the plan, not in `git rm -rf`.
-2. **Product naming is hard** — humans need a chance to look at the proposed product list and say "actually, `database` and `storage` should be one product called `persistence`" before that name is baked into 50 file paths.
+两个原因：
+1. **不可逆悬崖** —— 一旦 `git submodule add` 和 `popsicle init` 跑过，你做的改动就「难（不是不可能，但很烦）撤销」了。在计划阶段抓错，别在 `git rm -rf` 阶段抓错。
+2. **Product 命名很难** —— 在那个名字被烙进 50 个文件路径之前，给人类一个机会去看 product 清单然后说「等等，`database` 和 `storage` 应该合成一个叫 `persistence`」。
 
-If the human approves and then changes their mind after scaffolding: re-run the skill. It's the cheapest skill in the toolkit and produces no consumed-by-others artifacts other than the doc-architecture, which is meant to be revisitable.
+如果人类批准后又反悔：重跑这个 skill。它是工具箱里**最便宜**的 skill，产出的东西也只有 doc-architecture——它本来就被设计成可重访的。
 
-## Handling Multi-Repo Legacy Sources
+## 处理多仓库 legacy 源
 
-The default assumes one legacy repo. If the user's legacy footprint spans multiple repos:
-- Add multiple submodules under `legacy/<name1>/`, `legacy/<name2>/`, etc.
-- Document each in the plan's "Legacy Source" section
-- fact-extractor will need to be run per-submodule; that's fine
+默认假设 legacy 只有一个仓库。如果用户的 legacy 横跨多个仓库：
+- 在 `legacy/<name1>/`、`legacy/<name2>/` 下加多个 submodule
+- 计划的 "Legacy Source" 章节为每一个写一行
+- fact-extractor 要按 submodule 各跑一次；没问题
 
-## Handling Greenfield (No Legacy)
+## 处理 Greenfield（没有 legacy）
 
-Rare but valid. If the user is genuinely starting fresh:
-- Skip the submodule step
-- Skip the fact-extractor input
-- Product inventory comes entirely from human input
-- The skill still produces the same scaffold — the doc architecture is value-additive even without migration
+罕见但合法。如果用户真的是从零开始：
+- 跳过 submodule 步骤
+- 跳过 fact-extractor 输入
+- Product 清单完全由人类输入
+- 这个 skill 仍然产出相同的骨架——doc-architecture 即使没有迁移也是有价值的
 
-## When Things Go Wrong
+## 当事情出错时
 
-- **Submodule add fails** (network, auth) → record the failure in the project-init-plan, leave a `MIGRATION_TODO.md` at repo root with the exact command to run later, continue with the rest of the scaffold
-- **`popsicle module add` fails for one module** → continue with the others, record the failure
-- **The user disagrees with the product list mid-scaffold** → STOP. Roll back to surveying state. Do not partially scaffold.
+- **submodule add 失败**（网络、鉴权）→ 在 project-init-plan 里记录失败，在仓库根放一份 `MIGRATION_TODO.md`，里面写明稍后要跑的精确命令，继续铺剩下的骨架
+- **某个 `popsicle module add` 失败** → 继续装其它的，把失败记下来
+- **铺骨架到一半，用户对 product 清单不满** → **停**。回滚到 surveying 状态。**不要部分铺骨架。**
 
-## Output Format Convention
+## 输出格式约定
 
-Both artifacts (`project-init-plan` and `doc-architecture-charter`) end with their respective checklists. The plan's checklist is what the workflow guard verifies before allowing the transition to scaffolding.
+两个 artifact（`project-init-plan` 和 `doc-architecture-charter`）都以各自的 checklist 结尾。计划里的 checklist 是 workflow guard 在允许进入 scaffolding 之前会校验的那一份。

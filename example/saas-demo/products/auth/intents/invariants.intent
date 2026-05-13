@@ -1,0 +1,76 @@
+# Invariants — auth
+#
+# 领域永恒为真的规则。这些是 product 内部的 invariants；
+# 候选升格为全局的见 docs/invariants/README.md。
+#
+# Last-Updated: 2026-05-13
+# Last-Decision-Ref: PDR-0001
+
+invariant "email-uniqueness" {
+  pdr          = "PDR-0001"
+  source       = "PDR-0001 § Decision (D0)"
+  scope        = "product:auth (候选升格为 docs/invariants/)"
+
+  forall user1, user2 in users {
+    user1.email == user2.email implies user1.id == user2.id
+  }
+}
+
+invariant "no-plaintext-password" {
+  pdr     = "PDR-0001"
+  source  = "PDR-0001 § Security Invariants"
+  scope   = "product:auth"
+
+  forall t in time, p in process, s in store {
+    user.password_plaintext not in p.memory_dump
+    user.password_plaintext not in s.disk_persisted
+    user.password_plaintext not in log_entries
+    forall e in error_response { user.password_plaintext not in e.body }
+  }
+}
+
+invariant "session-isolation" {
+  pdr     = "PDR-0001"
+  source  = "PDR-0001 § Security Invariants"
+  scope   = "product:auth"
+
+  # 不同 User 的 session 不能互相伪造，token 不可预测
+  forall s1, s2 in sessions {
+    s1.user_id != s2.user_id implies s1.token != s2.token
+    s1.token is cryptographically_random
+  }
+}
+
+invariant "2fa-required-after-onboarding" {
+  pdr     = "PDR-0001"
+  source  = "PDR-0001 § Decision (D2)"
+  scope   = "product:auth"
+
+  # 一旦 totp_enabled_at 非空，就不允许后续 totp_enabled = false
+  # （唯一关闭路径：T-0021 用 Recovery Code 重置，但仍保持 totp_enabled）
+  forall u in users {
+    u.totp_enabled_at != null implies u.totp_enabled == true
+  }
+}
+
+invariant "audit-log-retention" {
+  pdr     = "PDR-0001"
+  source  = "PDR-0001 § Compliance Constraints + D6"
+  scope   = "product:auth (候选升格为 docs/invariants/)"
+
+  # Audit Log 写入后 ≥ 90 天不可删除；与 User 删除解耦
+  forall entry in audit_log {
+    entry.written_at + 90.days >= now() implies entry.deletable == false
+  }
+}
+
+invariant "no-self-revoke" {
+  pdr     = "PDR-0001"
+  source  = "PDR-0001 § Decision (D5)"
+  scope   = "product:auth"
+
+  # T-0030 中 Admin 不能吊销自己的 session
+  forall op in revoke_session_operations {
+    op.actor_user_id != op.target_user_id
+  }
+}

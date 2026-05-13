@@ -1,95 +1,95 @@
 # API Contracts — {project_name}
 
-> Companion to `{slug}.fact-extraction-report.md`. Records the **public surface** of the project: what callers can rely on. Grouped by bounded context.
+> `{slug}.fact-extraction-report.md` 的配套文件。记录项目的**公开表面**：调用方能依赖什么。按 bounded context 分组。
 
-> **Scope rule**: only items marked `pub` (Rust) / `export` (TS/Go) / module-level non-underscore (Python) belong here. Internal helpers go in `dependency-graph.md` if they cross module boundaries, otherwise are out of scope.
+> **范围规则**：只有标记为 `pub`（Rust）/ `export`（TS/Go）/ 模块级非下划线（Python）的条目属于本文档。跨模块的内部 helper 进 `dependency-graph.md`；其它出范围。
 
 ---
 
-## Bounded Context: {auth}
+## Bounded Context：{auth}
 
-> **Path**: `src/auth/`
-> **Purpose** (from module doc-comment or README): {"Identity, sessions, and role-based access control."}
+> **路径**：`src/auth/`
+> **用途**（来自模块 doc-comment 或 README）：{"身份、会话、基于角色的访问控制。"}
 
-### Public Functions
+### 公开函数
 
-| Signature | File:Line | Mutates | Notes |
+| 签名 | File:Line | 修改 | 备注 |
 |---|---|---|---|
-| `pub fn login(user: &str, pass: &str) -> Result<Token, Error>` | `src/auth/login.rs:42` | global session table | Panics if hash store is poisoned |
-| `pub fn logout(token: Token) -> Result<(), Error>` | `src/auth/login.rs:88` | global session table | — |
-| `pub fn check(token: &Token, role: Role) -> bool` | `src/auth/check.rs:12` | (read-only) | — |
+| `pub fn login(user: &str, pass: &str) -> Result<Token, Error>` | `src/auth/login.rs:42` | 全局 session 表 | 哈希存储 poisoned 时 panic |
+| `pub fn logout(token: Token) -> Result<(), Error>` | `src/auth/login.rs:88` | 全局 session 表 | — |
+| `pub fn check(token: &Token, role: Role) -> bool` | `src/auth/check.rs:12` | （只读）| — |
 
-### Public Types
+### 公开类型
 
-| Type | Kind | File:Line | Public Fields / Variants |
+| 类型 | 种类 | File:Line | 公开字段 / 变体 |
 |---|---|---|---|
-| `Token` | struct | `src/auth/types.rs:8` | `value: String`, `expires_at: SystemTime` |
-| `Role` | enum | `src/auth/types.rs:34` | `Admin`, `Editor`, `Viewer`, `Guest` |
-| `Error` | enum | `src/auth/types.rs:60` | `BadPassword`, `Locked`, `Expired`, `Internal(String)` |
+| `Token` | struct | `src/auth/types.rs:8` | `value: String`、`expires_at: SystemTime` |
+| `Role` | enum | `src/auth/types.rs:34` | `Admin`、`Editor`、`Viewer`、`Guest` |
+| `Error` | enum | `src/auth/types.rs:60` | `BadPassword`、`Locked`、`Expired`、`Internal(String)` |
 
-### Public Traits
+### 公开 Trait
 
-| Trait | File:Line | Implementors |
+| Trait | File:Line | 实现者 |
 |---|---|---|
-| `SessionStore` | `src/auth/store.rs:5` | `MemoryStore`, `RedisStore` |
+| `SessionStore` | `src/auth/store.rs:5` | `MemoryStore`、`RedisStore` |
 
-### HTTP/gRPC Endpoints (if any)
+### HTTP/gRPC 端点（如有）
 
-| Method | Path | Handler | Auth Required |
+| 方法 | 路径 | Handler | 需要鉴权 |
 |---|---|---|---|
-| POST | `/api/v1/login` | `auth::http::login_handler` (`src/http/auth.rs:12`) | No |
-| POST | `/api/v1/logout` | `auth::http::logout_handler` (`src/http/auth.rs:48`) | Yes (Token) |
+| POST | `/api/v1/login` | `auth::http::login_handler`（`src/http/auth.rs:12`）| 否 |
+| POST | `/api/v1/logout` | `auth::http::logout_handler`（`src/http/auth.rs:48`）| 是（Token）|
 
-### Behavioral Notes (only what's documented or test-encoded)
+### 行为备注（只写已记录或测试编码的内容）
 
-- **Lockout policy** (encoded in `tests/auth/lockout.rs`): 5 consecutive failures within 15 minutes → user locked for 30 minutes.
-- **Token TTL** (encoded in `src/auth/login.rs:55`): 24 hours.
+- **锁定策略**（编码在 `tests/auth/lockout.rs`）：15 分钟内连续 5 次失败 → 用户锁定 30 分钟。
+- **Token TTL**（编码在 `src/auth/login.rs:55`）：24 小时。
 
-> Do NOT add behavioral notes that are inferred. Only quote what tests assert or what the code literally does.
+> **不要**写推断出来的行为备注。只引用测试断言或代码字面表达。
 
 ---
 
-## Bounded Context: {payment}
+## Bounded Context：{payment}
 
-> **Path**: `src/payment/`
-> **Purpose**: {"…"}
+> **路径**：`src/payment/`
+> **用途**：{"……"}
 
-### Public Functions
+### 公开函数
 
-| Signature | File:Line | Mutates | Notes |
+| 签名 | File:Line | 修改 | 备注 |
 |---|---|---|---|
 | ... | ... | ... | ... |
 
-(repeat sections per context)
+（按 context 重复以上章节）
 
 ---
 
-## Cross-Cutting Public APIs
+## 跨切面公开 API
 
-> APIs that don't belong to a single bounded context (e.g. logging, error types, common traits).
+> 不属于任何单一 bounded context 的 API（如日志、错误类型、通用 trait）。
 
-| Item | File:Line | Notes |
+| 条目 | File:Line | 备注 |
 |---|---|---|
-| `pub trait Telemetry` | `src/common/telemetry.rs:1` | Used by all contexts |
+| `pub trait Telemetry` | `src/common/telemetry.rs:1` | 所有 context 共用 |
 
 ---
 
-## Stability Markers
+## 稳定性标记
 
-> Anything explicitly marked `#[deprecated]`, `@deprecated`, `// EXPERIMENTAL`, etc.
+> 任何被显式标注 `#[deprecated]`、`@deprecated`、`// EXPERIMENTAL` 等的条目。
 
-| Item | Marker | Reason | File:Line |
+| 条目 | 标记 | 原因 | File:Line |
 |---|---|---|---|
-| `pub fn legacy_login_v1` | `#[deprecated(since = "0.4.0")]` | Use `login` | `src/auth/legacy.rs:8` |
+| `pub fn legacy_login_v1` | `#[deprecated(since = "0.4.0")]` | 改用 `login` | `src/auth/legacy.rs:8` |
 
 ---
 
 ## Extraction Checklist
 
-- [ ] Every bounded context from `fact-extraction-report.md` has its own section
-- [ ] Every signature includes its file:line
-- [ ] Every "Mutates" cell is filled (use `(read-only)` where applicable; do not leave blank)
-- [ ] HTTP/gRPC endpoints section either populated or explicitly says `(none — library only)`
-- [ ] Behavioral notes section contains only test-asserted or literally-encoded behavior (no inference)
-- [ ] Cross-cutting APIs section either populated or says `(none)`
-- [ ] Stability markers section either populated or says `(no deprecated/experimental markers found)`
+- [ ] `fact-extraction-report.md` 中每个 bounded context 在此都有独立章节
+- [ ] 每个签名都含 file:line
+- [ ] 每个「修改」单元格都填了（只读处写 `（只读）`；**不留空**）
+- [ ] HTTP/gRPC 端点章节已填，或显式写 `(none — library only)`
+- [ ] 行为备注章节只含测试断言或代码字面表达（无推断）
+- [ ] 跨切面 API 章节已填，或写 `(none)`
+- [ ] 稳定性标记章节已填，或写 `(no deprecated/experimental markers found)`

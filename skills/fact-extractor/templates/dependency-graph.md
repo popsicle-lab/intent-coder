@@ -1,10 +1,10 @@
 # Dependency Graph — {project_name}
 
-> Companion to `{slug}.fact-extraction-report.md`. Records the project's module/crate/package import structure and external dependencies.
+> `{slug}.fact-extraction-report.md` 的配套文件。记录项目的模块/crate/包 import 结构与外部依赖。
 
-## Internal Module Graph
+## 内部模块图
 
-> Each row: which modules import which. Used by rfc-writer to design new module boundaries.
+> 每行：哪些模块 import 哪些。供 rfc-writer 设计新模块边界使用。
 
 ```mermaid
 graph LR
@@ -14,74 +14,74 @@ graph LR
   ui --> core
 ```
 
-### Adjacency Table
+### 邻接表
 
-| Module | Depends On (internal) | Reverse Deps |
+| 模块 | 依赖（内部）| 反向依赖 |
 |---|---|---|
-| `intent-cli` | `intent-core` | (none — top of stack) |
-| `intent-core` | `intent-syntax`, `z3` (external) | `intent-cli`, `intent-ui` |
-| `intent-syntax` | (none) | `intent-core` |
-| `intent-ui` | `intent-core`, `tauri` (external) | (none — top of stack) |
+| `intent-cli` | `intent-core` | （无 —— 栈顶）|
+| `intent-core` | `intent-syntax`、`z3`（外部）| `intent-cli`、`intent-ui` |
+| `intent-syntax` | （无）| `intent-core` |
+| `intent-ui` | `intent-core`、`tauri`（外部）| （无 —— 栈顶）|
 
-> Why two formats: the diagram is for humans skimming; the table is the machine-readable source of truth.
+> 为什么两种格式：图给人粗读用；表是机器可读的事实来源。
 
 ---
 
-## External Dependencies
+## 外部依赖
 
-### Direct (declared in {Cargo.toml / package.json / go.mod})
+### 直接依赖（声明在 {Cargo.toml / package.json / go.mod}）
 
-| Name | Version | Used By | License | Notes |
+| 名称 | 版本 | 用于 | License | 备注 |
 |---|---|---|---|---|
-| `serde` | `1.0.196` | `intent-core`, `intent-cli` | MIT/Apache | Serialization |
-| `z3` | `0.12.1` | `intent-core` | MIT | SMT bindings |
+| `serde` | `1.0.196` | `intent-core`、`intent-cli` | MIT/Apache | 序列化 |
+| `z3` | `0.12.1` | `intent-core` | MIT | SMT 绑定 |
 | ... | ... | ... | ... | ... |
 
-### Transitive (selected — full list in lockfile)
+### 传递依赖（精选 —— 完整列表见 lockfile）
 
-| Name | Version | Pulled In By | Notes |
+| 名称 | 版本 | 被谁引入 | 备注 |
 |---|---|---|---|
-| `libloading` | `0.8` | `z3 → z3-sys` | C library loader |
+| `libloading` | `0.8` | `z3 → z3-sys` | C 库 loader |
 | ... | ... | ... | ... |
 
-### Version Constraints
+### 版本约束
 
-> Anything pinned, yanked, or under heavy churn. Helps adr-writer document upgrade decisions.
+> 被 pin、被 yank、或剧烈变动中的依赖。帮 adr-writer 记录升级决策。
 
-| Dependency | Current | Latest | Pin reason |
+| 依赖 | 当前 | 最新 | Pin 原因 |
 |---|---|---|---|
-| `clap` | `4.5.0` | `4.5.27` | (none — ok to upgrade) |
-| `tauri` | `=2.0.0` | `2.1.x` | Pinned: known regression in 2.1 (issue #X) |
+| `clap` | `4.5.0` | `4.5.27` | （无 —— 可升级）|
+| `tauri` | `=2.0.0` | `2.1.x` | Pinned：2.1 已知回归（issue #X）|
 
 ---
 
-## External Service Calls
+## 外部服务调用
 
-> Network calls to external systems. Sourced from grep on common HTTP/gRPC client patterns.
+> 对外部系统的网络调用。基于对常见 HTTP/gRPC client 模式的 grep 得到。
 
-| Service | Caller (file:line) | Protocol | Used For |
+| 服务 | 调用方（file:line）| 协议 | 用途 |
 |---|---|---|---|
-| {GitHub API} | `src/release/check.rs:42` | HTTPS | Version check |
+| {GitHub API} | `src/release/check.rs:42` | HTTPS | 版本检查 |
 | ... | ... | ... | ... |
 
 ---
 
-## File-System Touch Points
+## 文件系统接触点
 
-> Where the project reads/writes outside its own working directory.
+> 项目在自己工作目录之外读 / 写的位置。
 
-| Location | Purpose | Caller |
+| 位置 | 用途 | 调用方 |
 |---|---|---|
-| `~/.config/{app}/` | User config | `src/config/load.rs:18` |
-| `/tmp/{app}-*` | Scratch files | `src/cache/tmp.rs:5` |
+| `~/.config/{app}/` | 用户配置 | `src/config/load.rs:18` |
+| `/tmp/{app}-*` | 暂存文件 | `src/cache/tmp.rs:5` |
 
 ---
 
 ## Extraction Checklist
 
-- [ ] Internal graph + adjacency table both present
-- [ ] External direct deps complete (no `…` in the table)
-- [ ] Transitive deps section lists at least the security-sensitive ones (FFI, network, crypto)
-- [ ] Version constraints section flags every pin/yank with a reason
-- [ ] External service calls section either populated or explicitly says `(none — fully offline)`
-- [ ] File-system touch points section either populated or explicitly says `(none)`
+- [ ] 内部图 + 邻接表都已就位
+- [ ] 直接外部依赖完整（表里没有 `…`）
+- [ ] 传递依赖章节至少列出安全敏感的（FFI、网络、密码学）
+- [ ] 版本约束章节为每个 pin/yank 标注理由
+- [ ] 外部服务调用章节已填，或显式写 `(none — fully offline)`
+- [ ] 文件系统接触点已填，或显式写 `(none)`

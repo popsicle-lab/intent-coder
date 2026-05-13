@@ -1,92 +1,92 @@
 # Fact Extraction Report — {project_name}
 
-> **Baseline date**: {YYYY-MM-DD}
-> **Source commit**: `{git rev-parse HEAD}`
-> **Extracted by**: fact-extractor v0.1.0
+> **基线日期**：{YYYY-MM-DD}
+> **源 commit**：`{git rev-parse HEAD}`
+> **抽取者**：fact-extractor v0.1.0
 
-This report is the **entry point** to the fact-base for `{project_name}`. It carries the executive summary and links to four detail artifacts. Every claim here is sourced from one of the four; do not introduce facts that aren't traceable to a detail artifact.
+本报告是 `{project_name}` 事实基的**入口**。它承载执行摘要，并链接到 4 份详细 artifact。这里的每个声明都来自 4 份中的一份；不要引入无法追溯到详细 artifact 的事实。
 
 ---
 
 ## Summary
 
-| Metric | Value | Source |
+| 指标 | 值 | 来源 |
 |---|---|---|
-| Total LoC | {n} | tokei (appendix A.1) |
-| Primary language(s) | {Rust 78%, TS 22%} | tokei |
-| Public crates / packages | {n} | dependency-graph.md |
-| External direct dependencies | {n} | dependency-graph.md |
-| Public API surface (functions + types) | {n} | api-contracts.md |
-| `unsafe` blocks | {n} | unsafe-risk-report.md |
-| `.unwrap()` / `.expect()` call sites | {n} | unsafe-risk-report.md |
-| TODO / FIXME / HACK count | {n} | tech-debt-inventory.md |
-| Top-50 commit-hotspot files | listed in §Risk Hotspots | git log |
+| 总 LoC | {n} | tokei（appendix A.1）|
+| 主语言 | {Rust 78%, TS 22%} | tokei |
+| 公开 crate / package 数 | {n} | dependency-graph.md |
+| 直接外部依赖数 | {n} | dependency-graph.md |
+| 公开 API 表面（函数 + 类型）| {n} | api-contracts.md |
+| `unsafe` 块数 | {n} | unsafe-risk-report.md |
+| `.unwrap()` / `.expect()` 调用点 | {n} | unsafe-risk-report.md |
+| TODO / FIXME / HACK 总数 | {n} | tech-debt-inventory.md |
+| Top-50 commit 热点文件 | 见 §Risk Hotspots | git log |
 
 ---
 
 ## Bounded Contexts
 
-> Top-level directories that look like cohesive bounded contexts. Each becomes a candidate "subject area" for downstream PRD/RFC writers.
+> 看起来像内聚 bounded context 的顶级目录。每一个都是下游 PRD/RFC writer 的「主题区」候选。
 
-| Context | Path | LoC | Primary types | Notes |
+| Context | 路径 | LoC | 主要类型 | 备注 |
 |---|---|---|---|---|
-| {auth} | `src/auth/` | {1,243} | `User`, `Session`, `Role` | Owns identity & access |
-| {payment} | `src/payment/` | {2,108} | `Charge`, `Refund`, `Receipt` | Calls external Stripe gateway |
-| {storage} | `src/storage/` | {876} | `Repo`, `Tx` | Wraps Postgres |
+| {auth} | `src/auth/` | {1,243} | `User`、`Session`、`Role` | 持有身份与访问控制 |
+| {payment} | `src/payment/` | {2,108} | `Charge`、`Refund`、`Receipt` | 调用外部 Stripe 网关 |
+| {storage} | `src/storage/` | {876} | `Repo`、`Tx` | 包装 Postgres |
 | ... | ... | ... | ... | ... |
 
-If a directory doesn't map cleanly to a context, list it under **§Unclassified** at the bottom of the table — don't force a label.
+如果某个目录无法干净映射到一个 context，列在表底部的 **§Unclassified** —— **不要**强行贴标签。
 
 ---
 
 ## Domain Glossary
 
-> Terms that recur in code, comments, or doc strings. Used by downstream skills to maintain ubiquitous language.
+> 在代码、注释、doc string 中反复出现的术语。下游 skill 用它维护统一语言。
 
-| Term | First seen | Likely meaning | Confidence |
+| 术语 | 首次出现 | 可能含义 | 置信度 |
 |---|---|---|---|
-| {Tenant} | `src/multitenancy/lib.rs:1` | Customer organization that owns a set of users | high |
-| {Pinpoint} | `docs/internal.md:42` | Geo-spatial event with attached metadata | medium |
-| {Phase} | `src/lifecycle.rs:18` | One of 4 lifecycle states: pending/active/sealed/archived | high |
+| {Tenant} | `src/multitenancy/lib.rs:1` | 拥有一组 user 的客户组织 | high |
+| {Pinpoint} | `docs/internal.md:42` | 带元数据的地理空间事件 | medium |
+| {Phase} | `src/lifecycle.rs:18` | 4 种生命周期状态之一：pending/active/sealed/archived | high |
 
-Confidence is `high` when the term is defined explicitly (in a struct doc-comment or README); `medium` when meaning is inferred from usage; `low` when usage is inconsistent.
+`high`：术语在 struct doc-comment 或 README 中有明确定义；`medium`：含义从使用方式推断；`low`：使用方式前后不一致。
 
 ---
 
 ## Risk Hotspots
 
-> Files / modules that combine high churn AND high risk constructs. These are the prime candidates for the first migration slice.
+> 同时具备**高 churn + 高风险构造**的文件 / 模块。首个迁移切片的首选候选。
 
-| File | Commits/yr | unsafe count | unwrap count | TODO count | Primary risk |
+| 文件 | 提交/年 | unsafe 数 | unwrap 数 | TODO 数 | 主要风险 |
 |---|---|---|---|---|---|
-| `src/payment/process.rs` | {47} | {0} | {12} | {3} | Panics on edge cases; no input validation |
-| `src/auth/session.rs` | {38} | {2} | {5} | {1} | unsafe global state |
+| `src/payment/process.rs` | {47} | {0} | {12} | {3} | 边界情况下 panic；无入参校验 |
+| `src/auth/session.rs` | {38} | {2} | {5} | {1} | unsafe 全局状态 |
 | ... | ... | ... | ... | ... | ... |
 
-Each row must reference a specific subsection in `unsafe-risk-report.md` or `tech-debt-inventory.md` for the supporting evidence.
+每一行必须引用 `unsafe-risk-report.md` 或 `tech-debt-inventory.md` 中的具体子节作为支撑证据。
 
 ---
 
-## Suggested First Migration Slice
+## 建议的首个迁移切片
 
-> **Recommendation**, not a decision. Final scoping happens in arch-debate / rfc-writer.
+> **建议**，不是决定。最终范围在 arch-debate / rfc-writer 阶段确定。
 
-Based on the hotspot table above, the lowest-risk-highest-leverage first slice is **{`src/payment/`}** because:
+基于上面的热点表，**风险最低 + 杠杆最高**的首切片是 **{`src/payment/`}**，因为：
 
-1. {High churn (47 commits/yr) → frequent re-touch → high benefit from invariants}
-2. {No external API consumers visible in `api-contracts.md` → easier to refactor}
-3. {Already has TODO comments hinting at desired invariants → spec-writer has a head start}
+1. {高 churn（47 commits/yr）→ 频繁触碰 → invariant 收益高}
+2. {`api-contracts.md` 中未见外部 API 消费者 → 重构更容易}
+3. {已有 TODO 注释暗示期望的 invariant → spec writer 有 head start}
 
-Alternative slices considered:
+考虑过的替代切片：
 
-- **{src/auth/}**: also high-churn, but `unsafe` global state requires unsafe-removal as a prerequisite — larger scope.
-- **{src/storage/}**: low churn, low risk; high effort, low payoff for first slice.
+- **{src/auth/}**：同样高 churn，但 `unsafe` 全局状态要求先做 unsafe 移除——范围更大。
+- **{src/storage/}**：低 churn、低风险；首切片的投入产出比差。
 
 ---
 
-## Detail Artifacts
+## 详细 Artifact
 
-| Artifact | File | Status |
+| Artifact | 文件 | 状态 |
 |---|---|---|
 | Dependency graph | [{slug}.dependency-graph.md]({slug}.dependency-graph.md) | ✅ |
 | API contracts | [{slug}.api-contracts.md]({slug}.api-contracts.md) | ✅ |
@@ -95,30 +95,30 @@ Alternative slices considered:
 
 ---
 
-## Tool Provenance
+## 工具来源
 
-| Tool | Version | Used For | Status |
+| 工具 | 版本 | 用途 | 状态 |
 |---|---|---|---|
-| tokei | {12.1} | LoC counts, language breakdown | ✅ |
-| cargo metadata | {1.0} | Rust dependency graph | ✅ |
-| cargo tree | {1.79} | Transitive deps | ✅ |
-| ripgrep | {14.1} | Pattern mining (unsafe, TODO, public API) | ✅ |
-| ast-grep | {0.20} | Structural matching (optional) | ⚠️ not available |
-| git log | — | Churn / hotspot data | ✅ |
+| tokei | {12.1} | LoC 计数、语言占比 | ✅ |
+| cargo metadata | {1.0} | Rust 依赖图 | ✅ |
+| cargo tree | {1.79} | 传递依赖 | ✅ |
+| ripgrep | {14.1} | 模式挖掘（unsafe、TODO、public API）| ✅ |
+| ast-grep | {0.20} | 结构匹配（可选）| ⚠️ 不可用 |
+| git log | — | Churn / 热点数据 | ✅ |
 
-If a tool was unavailable, the section that would have used it is flagged `[reduced fidelity]`.
+某工具不可用时，本应使用它的章节会被标记 `[reduced fidelity]`。
 
 ---
 
 ## Extraction Checklist
 
-- [ ] All five artifacts produced and cross-linked
-- [ ] Every Summary-table value cites a detail artifact
-- [ ] Bounded contexts listed (or `Unclassified` populated)
-- [ ] Domain glossary contains ≥10 terms with confidence labels
-- [ ] Risk hotspots table contains ≥5 entries with evidence pointers
-- [ ] Suggested first migration slice has at least one alternative considered
-- [ ] Tool provenance table lists every tool actually used
-- [ ] No sentence in the report contains the phrases "should", "ought to", "is bad", "is good" (editorializing check)
-- [ ] No sentence in the report invents requirements not present in the code
-- [ ] Every approximate number replaced with the exact value or removed
+- [ ] 5 个 artifact 都产出且交叉链接
+- [ ] Summary 表中每个值都引用了详细 artifact
+- [ ] Bounded contexts 已列（或 `Unclassified` 已填）
+- [ ] Domain glossary 含 ≥10 个术语且都带置信度
+- [ ] Risk hotspots 表含 ≥5 条且都带证据指针
+- [ ] 建议的首迁移切片至少有一个替代被考虑
+- [ ] 工具来源表列出了所有实际使用过的工具
+- [ ] 报告中没有句子含 "should"、"ought to"、"is bad"、"is good"（发表观点检查）
+- [ ] 报告中没有句子凭空发明代码中不存在的需求
+- [ ] 每个近似数字要么换成精确值，要么删掉

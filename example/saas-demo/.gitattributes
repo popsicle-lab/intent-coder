@@ -1,0 +1,2 @@
+*.intent linguist-language=Scala
+*.md linguist-detectable=true
