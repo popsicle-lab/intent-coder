@@ -41,6 +41,155 @@
 > L2 = PRODUCT.md（顶层索引）+ tasks/ 子目录（按 5 个旅程阶段分类的 task chunk）。
 > 名义上仍是「PRODUCT.md 4 件套」，技术上是「顶层 + 多文件展开」。
 
+### 写入流（PDR/ADR 如何驱动活文档变更）
+
+下图显示一条决策从「草稿」到「生效」必须经过的传播路径，以及活文档 ↔ 决策档
+之间的双向链。
+
+```mermaid
+graph TB
+    subgraph DRAFT["proposals/ · 流动 · 状态机"]
+        direction LR
+        EXP[exploring/] --> PROP[proposed/]
+        PROP --> ACC[accepted/]
+        PROP --> REJ[rejected/]
+    end
+
+    subgraph L3LAYER["L3 决策层 · append-only · decisions/"]
+        direction LR
+        PDR["pdr/PDR-XXXX-*.md<br/>产品决策 · 永不修改"]
+        ADR["adr/ADR-XXXX-*.md<br/>技术决策 · 永不修改"]
+    end
+
+    subgraph L1L4["L1 + L4 形式化层 · intents/"]
+        direction LR
+        INV["invariants.intent (L1)"]
+        ACPT["acceptance.intent (L2 片段)"]
+        CON["contracts.intent (L4)"]
+    end
+
+    subgraph L2LAYER["L2 用户视角活文档"]
+        direction LR
+        PROD[PRODUCT.md]
+        TSK["tasks/{5阶段}/T-XXXX.md"]
+    end
+
+    subgraph L4LAYER["L4 技术视角活文档"]
+        ARCH[ARCHITECTURE.md]
+    end
+
+    subgraph L0L5["跨 product 全局 · docs/"]
+        CHRT[L0 CHARTER.md]
+        CTX[PROJECT_CONTEXT.md]
+        JRN[user-journeys/J-XXXX]
+    end
+
+    ACC -- 升级 --> PDR
+    ACC -- 升级 --> ADR
+    PDR -- "Intent Impact" --> ACPT
+    PDR -- "Intent Impact" --> INV
+    ADR -- "Intent Impact" --> CON
+    PDR -- "Consequences (file-level)" --> PROD
+    PDR -- "Consequences (file-level)" --> TSK
+    ADR -- "Consequences (file-level)" --> ARCH
+    PROD -. Decision-Ref .-> PDR
+    ARCH -. Decision-Ref .-> ADR
+    TSK -. Decision-Ref .-> PDR
+
+    classDef live fill:#0d9488,stroke:#0f766e,color:#fff
+    classDef dead fill:#7c2d12,stroke:#451a03,color:#fff
+    classDef draft fill:#a16207,stroke:#713f12,color:#fff
+    classDef global fill:#1e40af,stroke:#1e3a8a,color:#fff
+    classDef intent fill:#7e22ce,stroke:#581c87,color:#fff
+    class L2LAYER,L4LAYER live
+    class L3LAYER dead
+    class DRAFT draft
+    class L0L5 global
+    class L1L4 intent
+```
+
+**读图三规则**
+
+1. 实线 = 写入流（PDR/ADR Accepted 触发下游修改）
+2. 虚线 = 反向引用（活文档每段尾部的 `Decision-Ref` 锚点）
+3. 配色：🟢 活 / 🟫 永生 / 🟡 流动 / 🔵 全局 / 🟣 形式化
+
+### Skill ↔ 文档层映射
+
+popsicle 本身**不携带工作流**——它只提供 Skill Runner、Run、Artifact 三个原语。
+下图显示 intent-coder 的 skill 集合如何把 popsicle 的 artifact 区映射到本仓库的
+L0–L4 文档层。`promote` 步骤由 intent-coder 自己实现（不污染 popsicle 核心）。
+
+```mermaid
+flowchart LR
+    subgraph POPSICLE[".popsicle/ · popsicle 原语（工作流无关）"]
+        direction TB
+        ART["artifacts/&lt;run-id&gt;/<br/>skill 原始产出"]
+        DB[(popsicle.db<br/>run ledger)]
+    end
+
+    subgraph SKILLS["intent-coder Skills（v0.3）"]
+        direction TB
+        S1[project-init]
+        S2[fact-extractor]
+        S3[product-debate]
+        S4[arch-debate]
+        S5[prd-writer]
+        S6[rfc-writer]
+        S7[living-doc-author]
+        S8[intent-consistency-check]
+    end
+
+    subgraph REPO["本仓库（活 + 决策档）"]
+        direction TB
+        L2P[L2 PRODUCT.md + tasks/]
+        L4P[L4 ARCHITECTURE.md]
+        L1P["L1/L2/L4 *.intent"]
+        L3P[L3 decisions/]
+        L4D[proposals/]
+        BASE[docs/baseline/]
+        GLB["L0 CHARTER + PROJECT_CONTEXT"]
+    end
+
+    S1 -- 一次性 --> GLB
+    S1 -- 骨架 --> L2P
+    S2 -- 写入 --> BASE
+    S3 -- 草稿落地 --> L4D
+    S4 -- 草稿落地 --> L4D
+    S5 -- 升级 accepted/ --> L3P
+    S5 -- 同步重写 --> L2P
+    S5 -- 追加 block --> L1P
+    S6 -- 升级 accepted/ --> L3P
+    S6 -- 同步重写 --> L4P
+    S6 -- 追加 block --> L1P
+    S7 -- 仅活文档微调 --> L2P
+    S7 -- 仅活文档微调 --> L4P
+    S8 -- Z3 闸门 --> L1P
+
+    S1 -.run.-> ART
+    S2 -.run.-> ART
+    S3 -.run.-> ART
+    S5 -.run.-> ART
+    ART -."intent-coder promote".-> REPO
+
+    classDef stage fill:#0369a1,stroke:#075985,color:#fff
+    classDef live fill:#0d9488,stroke:#0f766e,color:#fff
+    classDef dead fill:#7c2d12,stroke:#451a03,color:#fff
+    classDef draft fill:#a16207,stroke:#713f12,color:#fff
+    classDef pop fill:#4338ca,stroke:#3730a3,color:#fff
+    classDef intent fill:#7e22ce,stroke:#581c87,color:#fff
+    class S1,S2,S3,S4,S5,S6,S7,S8 stage
+    class L2P,L4P,GLB,BASE live
+    class L1P intent
+    class L3P dead
+    class L4D draft
+    class ART,DB pop
+```
+
+**关键边界**：popsicle 核心**不知道** L0–L6、PDR、ADR、proposals 这些概念。
+所有「artifact → 仓库哪一层」的映射，是 intent-coder 模块自己实现的 promote
+逻辑，通过读 popsicle 暴露的 `artifact_path(run_id, doc_id)` 接口完成。
+
 ---
 
 ## Per-Product 4-Piece Set
