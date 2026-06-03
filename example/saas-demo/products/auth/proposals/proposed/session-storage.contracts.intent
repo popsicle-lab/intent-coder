@@ -1,0 +1,28 @@
+// ============================================================
+// Contracts 种子 — auth / session（rfc-writer 产出，dogfood）
+// ============================================================
+//
+// 用 intent-lang 的 goal 块声明契约意图（0 VC）。
+//
+// ⚠️ 状态：[Awaiting ADR-0003: Session Storage]。在 ADR-0003 由 adr-writer 固化为
+//    Accepted 前不收紧。解锁后交 intent-spec-writer 收紧进 session.intent。
+//
+// ⚠️ D2：校验延迟 p95 ≤ 50ms 是 SLO，不进 goal——见 RFC § Quality Attributes。
+//
+// Last-Updated: 2026-05-13
+// Source-RFC: session-storage.rfc.md
+// ============================================================
+
+// 接口（语义层，[Awaiting ADR-0003: Session Storage]）：
+//   verify_session(token: String) -> Option<UserContext { user_id, account_id }>
+// 防串号：返回的 user_id 恒等于该 session 持久化的归属 user。
+goal "auth 对外提供可信的会话校验" {
+  rationale: "billing/admin-console 每次鉴权都依赖 auth 校验 session；校验必须无歧义、可即时撤销、且只解析出 session 真正归属的 user"
+  stakeholder: ["billing", "admin-console", "security"]
+  measure: "下游无任何绕过 verify_session 的鉴权路径；校验只解析出 session 归属的 user（无串号）"
+}
+
+// ============================================================
+// 自检：goal 完整；标 [Awaiting ADR-0003]；无性能数字进 goal；
+//       intent check 本文件 → 解析通过、0 VC、exit 0。
+// ============================================================

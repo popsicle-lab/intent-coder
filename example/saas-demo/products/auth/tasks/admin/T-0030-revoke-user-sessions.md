@@ -15,10 +15,10 @@ limits:
   - 操作进 Audit Log，不可撤销
 related_intents:
   - acceptance.intent#T-0030-revoke-takes-effect-in-5s
-  - invariants.intent#session-isolation
+  - session.intent#session-isolation
 related_next_tasks: []
 fact_cite: []
-last_verified: null
+last_verified: 2026-05-13
 ---
 
 # 我作为 Account Admin 吊销某个员工的所有 Session
@@ -65,6 +65,8 @@ last_verified: null
 ## 反向引用
 
 - PDR: [PDR-0001 § Decision (D5)](../../decisions/pdr/PDR-0001-auth-strategy.md)
+- ADR: [ADR-0003 § Decision (Redis 集中式 session store + verify_session 契约)](../../decisions/adr/ADR-0003-session-storage.md)
+- Intent: [`session.intent#session-isolation` (`SessionResolvesToOwner`, Z3 verified)](../../intents/session.intent)
 
 ## Charter Compliance
 

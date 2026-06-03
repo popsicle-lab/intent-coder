@@ -1,121 +1,71 @@
-# Contracts — auth
-#
-# 模块间接口的形式化定义。本文件的大部分 block 标 `[Awaiting ADR-XXXX]`——
-# arch-debate / rfc-writer 模块落地相应 ADR 后才能收紧。
-#
-# 注：本 demo 故意不装 arch-debate 模块，所以本文件大段空白。这是「契约位」
-# 的典型展示。
-#
-# Last-Updated: 2026-05-13
-# Last-Decision-Ref: PDR-0001 (跨 product 调用契约)
+// ============================================================
+// Contracts — auth（intent-lang 真实语法 / 路线甲）
+// ============================================================
+//
+// 角色：**契约位**。跨产品 / 内部模块接口的意图声明。多数技术形式仍
+// `[Awaiting ADR-XXXX]`——arch-debate / rfc-writer 落地相应 ADR 后才收紧。
+//
+// 表达方式：用 intent-lang 的 `goal` 块声明「这条契约为什么存在 + 谁消费 +
+// 怎么衡量」。`goal` 是一等语法节点，`intent check` 会解析但**不产生 VC**
+// （契约的逻辑前后置一旦由 ADR 定形，再补 intent/safety 进 acceptance/invariants）。
+//
+// ⚠️ 能力边界（D2）：性能契约（p95 ≤ 50ms、QPS ≥ 10000、read ≤ 5ms 等）
+//   **不进** goal 字段——它们是 SLO，由压测 / 监控守护，见 task 成功标志与
+//   docs 的可观测性章节。本文件只承载「意图」与「接口形状（注释）」。
+//
+// Last-Updated: 2026-05-13
+// Last-Decision-Ref: PDR-0001
+// ============================================================
 
-# ------------------------------------------------------------------
-# 跨 product RPC：供 billing / admin-console 消费
-# ------------------------------------------------------------------
+// ------------------------------------------------------------
+// 跨 product 契约：供 billing / admin-console 消费
+// ------------------------------------------------------------
 
-contract "verify_session" {
-  pdr      = "PDR-0001"
-  source   = "PDR-0001 § Cross-Product Integration"
-  consumer = ["billing", "admin-console"]
-  provider = "auth"
-
-  # 接口签名（语义层，技术形式 [Awaiting ADR-XXXX]）
-  signature {
-    input  = "session_token: String"
-    output = "Option<UserContext { user_id, account_id, expires_at }>"
-  }
-
-  # invariants 引用
-  guarantees [
-    "session-isolation",
-    "no-plaintext-password",  # token 在比对时不还原密码
-  ]
-
-  # 性能要求（来自 PRD § Success Metrics）
-  performance {
-    p95_latency_ms <= 50
-    qps_capacity   >= 10000
-  }
-
-  # 技术形式
-  implementation = "[Awaiting ADR-0003: Session Storage Selection]"
+// 接口（语义层，技术形式 [ADR-0003 Accepted 2026-05-13]：Redis 集中式 store）：
+//   verify_session(session_token: String)
+//     -> Option<UserContext { user_id, account_id, expires_at }>
+// SLO（不进 Z3）：p95 ≤ 50ms，QPS ≥ 10000 —— 见 docs 可观测性
+// 逻辑保证已收紧（session-isolation 防串号）→ intents/session.intent（Z3 verified）。
+goal "auth 对外提供可信的会话校验" {
+  rationale: "billing/admin-console 的每次鉴权都依赖 auth 校验 session，校验本身必须无歧义且不泄漏密码"
+  stakeholder: ["billing", "admin-console", "security"]
+  measure: "下游产品无任何绕过 verify_session 的鉴权路径；校验不还原明文密码"
 }
 
-contract "revoke_session_by_admin" {
-  pdr      = "PDR-0001"
-  source   = "PDR-0001 § Decision (D5)"
-  consumer = ["admin-console"]
-  provider = "auth"
-
-  signature {
-    input  = "admin_id: UUID, target_user_id: UUID, reason: String"
-    output = "Result<RevocationReceipt>"
-  }
-
-  guarantees ["no-self-revoke"]
-
-  implementation = "[Awaiting ADR-0004: Audit Log Storage]"
+// 接口 [Awaiting ADR-0005: Audit Log Storage]：
+//   revoke_session_by_admin(admin_id, target_user_id, reason) -> Result<RevocationReceipt>
+// 逻辑前后置已在 acceptance.intent 的 AdminRevokeTargetSession 形式化（D5：不能吊销自己）
+goal "管理员吊销会话可审计且不可自伤" {
+  rationale: "D5：管理员可踢人下线，但不能吊销自己（防误操作/防接管后自锁）；每次吊销留审计"
+  stakeholder: ["admin-console", "compliance", "security"]
+  measure: "审计日志覆盖每次吊销；无 actor == target 的吊销记录"
 }
 
-contract "emit_signed_up_event" {
-  pdr      = "PDR-0001"
-  source   = "PDR-0001 § Cross-Product Integration"
-  consumer = ["billing"]
-  provider = "auth"
-
-  # billing 监听此事件以创建 Free 订阅（J-0001 Stage 4）
-  schema = """
-    event user.signed_up {
-      user_id: UUID
-      account_id: UUID
-      email: String
-      signed_up_at: Timestamp
-    }
-  """
-
-  implementation = "[Awaiting ADR-XXXX: Event Bus Selection]"
+// 事件 [Awaiting ADR-XXXX: Event Bus]：
+//   event user.signed_up { user_id, account_id, email, signed_up_at }
+// billing 监听以创建 Free 订阅（J-0001 Stage 4）
+goal "注册成功事件驱动下游开通" {
+  rationale: "auth 注册成功后必须可靠通知 billing 创建 Free 订阅，解耦两个产品的写路径"
+  stakeholder: ["billing", "auth"]
+  measure: "每个 active 用户都有对应的 user.signed_up 事件与一条 billing 订阅"
 }
 
-# ------------------------------------------------------------------
-# 内部模块契约（auth-api / auth-core / auth-store / auth-audit）
-# ------------------------------------------------------------------
-
-# 以下全部 [Awaiting ADR-XXXX]，演示 hand-off
-
-contract "password_hashing_function" {
-  pdr           = "PDR-0001"
-  source        = "PDR-0001 § Security Invariants"
-  scope         = "auth-core"
-  guarantees    = ["no-plaintext-password"]
-  implementation = "[Awaiting ADR-0001: Password Hashing Algorithm Selection]"
-}
-
-contract "totp_verification_function" {
-  pdr           = "PDR-0001"
-  source        = "PDR-0001 § Decision (D2)"
-  scope         = "auth-core"
-  guarantees    = ["2fa-required-after-onboarding"]
-  implementation = "[Awaiting ADR-0002: TOTP Library Selection]"
-}
-
-contract "session_store_interface" {
-  pdr           = "PDR-0001"
-  source        = "PDR-0001 § Decision (D1)"
-  scope         = "auth-store"
-  guarantees    = ["session-isolation"]
-  performance   = "p95 read ≤ 5ms, write ≤ 10ms"
-  implementation = "[Awaiting ADR-0003: Session Storage Selection]"
-}
-
-contract "audit_log_writer" {
-  pdr           = "PDR-0001"
-  source        = "PDR-0001 § Compliance Constraints"
-  scope         = "auth-audit"
-  guarantees    = ["audit-log-retention"]
-  implementation = "[Awaiting ADR-0005: Audit Log Storage]"
-}
-
-# Charter Compliance Self-Check:
-# - [x] 每个 contract 都标了 PDR 来源 + scope（哪个模块或跨 product）
-# - [x] 内部 contracts 全部明确标 `[Awaiting ADR-XXXX]` —— 不允许偷偷写完
-# - [x] 跨 product contract 即使没有 ADR，也明确了 consumer / provider / 性能边界
+// ------------------------------------------------------------
+// 内部模块契约（全部 [Awaiting ADR-XXXX]，演示 hand-off）
+// ------------------------------------------------------------
+//
+// 以下契约的逻辑保证已分别落在 invariants.intent / acceptance.intent，
+// 技术实现待 ADR；此处仅登记「契约位」，不强行形式化。
+//
+//   password_hashing_function   scope=auth-core   保证 no-plaintext-password   [Awaiting ADR-0001]
+//   totp_verification_function  scope=auth-core   保证 2fa-required-after-onboarding（见 invariants.TwoFactorStaysOn）[Awaiting ADR-0002]
+//   session_store_interface     scope=auth-store  保证 session-isolation       [Awaiting ADR-0003]
+//   audit_log_writer            scope=auth-audit  保证 audit-log-retention（时间约束，测试侧守护）[Awaiting ADR-0005]
+//
+// ============================================================
+// 自检：
+//   - 每个跨产品契约都有 goal（rationale/stakeholder/measure）
+//   - 内部契约明确标 [Awaiting ADR-XXXX]，不偷偷写完
+//   - 无性能/时间数字进入 goal 字段（违反 D2）
+//   - `intent check` 本文件 → 解析通过，0 VC，exit 0
+// ============================================================

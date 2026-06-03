@@ -1,8 +1,29 @@
-# Contracts — admin-console
-#
-# Status: scaffold-only。所有契约 [Awaiting ADR-XXXX]。
-#
-# 预期消费的 auth / billing 契约（声明，不重定义）:
-# - uses auth.contracts.verify_session
-# - uses auth.contracts.revoke_session_by_admin
-# - uses billing.contracts.query_subscription (待 billing ADR 落地后才能引用)
+// ============================================================
+// Contracts — admin-console（intent-lang 真实语法 / 路线甲）
+// ============================================================
+//
+// 角色：契约位。admin-console 主要是 auth / billing 的**消费方**。
+// 用 `goal` 声明消费意图；技术形式 [Awaiting ADR-XXXX]。
+//
+// Last-Updated: 2026-05-13
+// Last-Decision-Ref: (pending first admin-console PDR)
+// ============================================================
+
+// uses auth.contracts.verify_session
+// uses auth.contracts.revoke_session_by_admin
+goal "admin-console 的所有特权操作经 auth 鉴权与吊销" {
+  rationale: "admin-console 不自建身份/会话；登录态校验与踢人下线都委托 auth，保持单一身份源"
+  stakeholder: ["admin-console", "auth", "security"]
+  measure: "admin-console 无自建会话存储；每个特权操作前都调用 auth.verify_session"
+}
+
+// uses billing.contracts.query_subscription（待 billing ADR 落地后才能引用）
+goal "admin-console 只读消费 billing 的订阅视图" {
+  rationale: "管理员需查看成员订阅/席位，但不应绕过 billing 直接改账务状态"
+  stakeholder: ["admin-console", "billing"]
+  measure: "admin-console 对 billing 仅有读路径；任何账务变更都走 billing 自己的接口"
+}
+
+// ============================================================
+// 验证：`intent check` → 解析通过，0 VC，exit 0。
+// ============================================================

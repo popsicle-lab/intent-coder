@@ -1,0 +1,39 @@
+// ============================================================
+// Contracts 种子（解锁版）— auth / session（adr-writer 产出，dogfood）
+// ============================================================
+//
+// 由 adr-writer 在 ADR-0003 固化为 Accepted 后解锁。goal 保留（0 VC）；
+// 变化是状态注释 + 末尾「可收紧逻辑保证」工单 → 交 intent-spec-writer。
+//
+// Last-Updated: 2026-05-13
+// Decision-Ref: ADR-0003（Accepted 2026-05-13）
+// ============================================================
+
+// 接口（语义层，[ADR-0003 Accepted 2026-05-13]）：
+//   verify_session(token: String) -> Option<UserContext { user_id, account_id }>
+goal "auth 对外提供可信的会话校验" {
+  rationale: "billing/admin-console 每次鉴权都依赖 auth 校验 session；校验必须无歧义、可即时撤销、且只解析出 session 真正归属的 user"
+  stakeholder: ["billing", "admin-console", "security"]
+  measure: "下游无任何绕过 verify_session 的鉴权路径；校验只解析出 session 归属的 user（无串号）"
+}
+
+// ============================================================
+// 可收紧逻辑保证（intent-spec-writer 工单）
+// ============================================================
+//
+// ADR-0003 已 Accepted，以下契约逻辑现在可收紧（落 products/auth/intents/session.intent）：
+//
+//   契约 "auth 对外提供可信的会话校验" → session-isolation：
+//     safety SessionResolvesToOwner(s: Session, r: SessionResolution) {
+//       // 校验有效时，解析出的 user 必等于 session 真正归属的 user（防串号）
+//       invariant (r.valid' && r.sessionId' == s.id') ==> r.resolvedUserId' == s.userId'
+//     }
+//     intent VerifySession(...)  // 触发 safety，证明 verify_session 满足隔离
+//
+// 注意：放**独立文件** session.intent（作用域约定——不混进 invariants.intent 的 2FA 域）。
+// 性能（p95 ≤ 50ms）不收紧（D2，压测守护）。
+//
+// ============================================================
+// 自检：goal 注释已 [Awaiting]→[Accepted]；工单已列；无性能数字进 goal；
+//       intent check 本文件 → 解析通过、0 VC、exit 0。
+// ============================================================

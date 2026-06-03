@@ -1,51 +1,83 @@
-# Invariants — billing
-#
-# Last-Updated: 2026-05-13
-# Last-Decision-Ref: PDR-0001
+// ============================================================
+// Invariants — billing（intent-lang 真实语法 / 路线甲）
+// ============================================================
+//
+// 来源：PDR-0001。
+//
+// ⚠️ 能力边界（D2 + intent-lang 现状）：
+//   - intent-lang **不支持聚合**（count / where）。`single-active-subscription`、
+//     `no-double-charge` 原本是「count(...) <= 1」，这里改写成等价的
+//     **双实体关系 theorem**（forall 两个实体 ⇒ 同一个）。但当前 intent-lang
+//     对 struct-typed forall theorem 标 **skipped**（未实现），所以它们暂时
+//     只声明、不验证——记入 intent-lang 待补清单。
+//   - `prorate-symmetric` 同理（双 SeatChange 关系），theorem 声明、当前 skipped。
+//   - `no-plaintext-card-number` 是运行时事实（memory/log/disk），**降级为测试断言**，
+//     不在本文件。
+//
+//   真正能被 Z3 verified 的，是下方「降级到 Free 即清零 seats」这条状态机不变量。
+//
+// Last-Updated: 2026-05-13
+// Last-Decision-Ref: PDR-0001
+// ============================================================
 
-invariant "single-active-subscription" {
-  pdr     = "PDR-0001"
-  source  = "PDR-0001 § Decision (D1) (候选升格为 docs/invariants/)"
-  scope   = "product:billing"
+enum SubStatus { Free, Active, PastDue, Canceled }
 
-  forall account in accounts {
-    count(account.subscriptions where status == "active") <= 1
-  }
+type Subscription {
+  id: Int
+  accountId: Int
+  status: SubStatus
+  seats: Int
 }
 
-invariant "no-double-charge" {
-  pdr     = "PDR-0001"
-  source  = "PDR-0001 § D4 + Security Invariants"
-  scope   = "product:billing"
-
-  forall sub in subscriptions, period in sub.billing_periods {
-    count(charges where charges.subscription == sub
-          and charges.period == period
-          and charges.status == "succeeded") <= 1
-  }
+type Charge {
+  id: Int
+  subscriptionId: Int
+  period: Int
+  succeeded: Bool
 }
 
-invariant "prorate-symmetric" {
-  pdr     = "PDR-0001"
-  source  = "PDR-0001 § D5"
-  scope   = "product:billing"
-
-  # 周期内增 X seat 立即扣 K 元 ⇔ 同周期减 X seat 退 K 元
-  forall increase_op, decrease_op in seat_changes
-    where increase_op.delta_seats == abs(decrease_op.delta_seats)
-      and increase_op.period == decrease_op.period {
-    abs(increase_op.prorate_amount) == abs(decrease_op.prorate_amount)
-  }
+type SeatChange {
+  period: Int
+  deltaSeats: Int
+  prorateAmount: Int
 }
 
-invariant "no-plaintext-card-number" {
-  pdr     = "PDR-0001"
-  source  = "PDR-0001 § Security Invariants + D3"
-  scope   = "product:billing"
+// ----- 能 verified 的保持型不变量 -----
 
-  forall t in time, p in process, s in store {
-    user.card_number_plaintext not in p.memory_dump
-    user.card_number_plaintext not in s.disk_persisted
-    user.card_number_plaintext not in log_entries
-  }
+// INV「降级到 Free 即清零付费 seats」：Free 计划不持有付费席位。
+// primed 形式 → 验证操作后态。
+safety FreeHasNoSeats(sub: Subscription) {
+  invariant sub.status' == Free ==> sub.seats' == 0
 }
+
+// T-0020 Dunning 连续失败 → 降级 Free 并清空 seats（数据保留逻辑由 acceptance 描述）。
+@tobe
+intent DowngradeToFreeOnDunningFail(sub: Subscription) {
+  require sub.status == PastDue
+  ensure sub.status' == Free
+  ensure sub.seats' == 0
+}
+
+// ----- 聚合 / 关系类不变量（theorem 声明，当前 intent-lang skipped）-----
+
+// INV「single-active-subscription」：同一 account 至多一个 active 订阅。
+theorem SingleActiveSubscription {
+  forall s1: Subscription, s2: Subscription,
+    (s1.accountId == s2.accountId && s1.status == Active && s2.status == Active) ==> s1.id == s2.id
+}
+
+// INV「no-double-charge」：同一订阅同一账期至多一笔成功扣费。
+theorem NoDoubleCharge {
+  forall c1: Charge, c2: Charge,
+    (c1.subscriptionId == c2.subscriptionId && c1.period == c2.period && c1.succeeded && c2.succeeded) ==> c1.id == c2.id
+}
+
+// INV「prorate-symmetric」：同账期内增减相同 seat 数，prorate 金额互为相反数。
+theorem ProrateSymmetric {
+  forall inc: SeatChange, dec: SeatChange,
+    (inc.period == dec.period && inc.deltaSeats == -dec.deltaSeats) ==> inc.prorateAmount == -dec.prorateAmount
+}
+
+// ============================================================
+// 验证：`intent check` → 1 intent verified，3 theorem skipped，exit 0。
+// ============================================================

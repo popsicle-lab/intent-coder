@@ -1,84 +1,56 @@
-# Contracts — billing
-#
-# Last-Updated: 2026-05-13
-# Last-Decision-Ref: PDR-0001
-#
-# 同 auth/contracts.intent，大段标 [Awaiting ADR-XXXX] 演示 arch-debate hand-off。
+// ============================================================
+// Contracts — billing（intent-lang 真实语法 / 路线甲）
+// ============================================================
+//
+// 角色：契约位。跨产品消费 auth、外部依赖 Stripe、内部模块接口。
+// 用 `goal` 声明契约意图；技术形式 [Awaiting ADR-XXXX]；性能/幂等等
+// 由实现 + 测试守护，不进 Z3。
+//
+// Last-Updated: 2026-05-13
+// Last-Decision-Ref: PDR-0001
+// ============================================================
 
-# ------------------------------------------------------------------
-# 跨 product：consume auth
-# ------------------------------------------------------------------
+// ------------------------------------------------------------
+// 跨 product：消费 auth
+// ------------------------------------------------------------
 
-contract "consume_verify_session" {
-  pdr       = "PDR-0001"
-  source    = "PDR-0001 § Cross-Product Integration"
-  consumer  = "billing"
-  provider  = "auth"
-
-  # 引用 auth/contracts.intent#verify_session
-  # billing 不重新定义，只声明它的消费契约
-  uses = "auth.contracts.verify_session"
-
-  consumer_requirement {
-    must_check_returned_user_id_matches_request_subject = true
-    must_reject_expired_session = true
-  }
+// uses auth.contracts.verify_session
+// consumer_requirement: 校验返回的 user_id 与请求主体一致；拒绝过期 session
+goal "billing 鉴权完全依赖 auth 的会话校验" {
+  rationale: "billing 不自建身份；每次写操作前用 auth.verify_session 校验，避免越权改订阅/扣费"
+  stakeholder: ["billing", "auth", "security"]
+  measure: "billing 无任何绕过 verify_session 的写路径；过期 session 一律拒绝"
 }
 
-contract "consume_user_signed_up_event" {
-  pdr       = "PDR-0001"
-  source    = "PDR-0001 § Cross-Product Integration + D1"
-  consumer  = "billing"
-  provider  = "auth"
-
-  uses = "auth.contracts.emit_signed_up_event"
-
-  consumer_behavior {
-    # 收到 user.signed_up 事件后 → 立即创建该 account 的 Free Subscription
-    creates = "Subscription(account_id, plan=free, status=active)"
-    idempotency_key = "user_signed_up.{user_id}"   # 重复事件不重复建
-  }
+// uses auth.contracts.emit_signed_up_event
+// consumer_behavior: 收到 user.signed_up → 创建 Free 订阅；idempotency_key = user_signed_up.{user_id}
+goal "注册即开通 Free 订阅且幂等" {
+  rationale: "D1：每个新 account 自动获得一个 Free 订阅；事件可能重投，必须幂等不重复建"
+  stakeholder: ["billing", "auth"]
+  measure: "每个 account 恰好一条由注册事件创建的订阅；重复事件不产生第二条"
 }
 
-# ------------------------------------------------------------------
-# 外部依赖：Stripe
-# ------------------------------------------------------------------
+// ------------------------------------------------------------
+// 外部依赖：Stripe
+// ------------------------------------------------------------
 
-contract "stripe_webhook_handler" {
-  pdr       = "PDR-0001"
-  source    = "PDR-0001 § Decision (D1, D4)"
-  scope     = "billing-stripe"
-
-  required_events = [
-    "checkout.session.completed",   # T-0001 升级成功
-    "invoice.paid",                  # T-0010 发票同步
-    "invoice.payment_failed",        # T-0020 Dunning 触发
-    "customer.subscription.deleted", # T-0040 期末取消生效
-    "customer.subscription.updated", # T-0030 Seat 调整确认
-  ]
-
-  guarantees = [
-    "no-double-charge",          # idempotency 由 Stripe event_id 保证
-    "single-active-subscription",
-  ]
-
-  implementation = "[Awaiting ADR-XXXX: Webhook Signature Verification + Idempotency Strategy]"
+// required_events: checkout.session.completed / invoice.paid / invoice.payment_failed
+//                  / customer.subscription.deleted / customer.subscription.updated
+// 逻辑保证 no-double-charge / single-active-subscription 见 invariants.intent
+// [Awaiting ADR-XXXX: Webhook 签名校验 + 幂等策略]
+goal "Stripe webhook 是订阅状态的唯一真相来源" {
+  rationale: "D1/D4：本 SaaS 不自行推断扣费结果，一切以 Stripe webhook 为准，避免双方状态分叉"
+  stakeholder: ["billing", "finance"]
+  measure: "订阅/发票状态变更全部可追溯到一个已验签的 Stripe event；无本地臆测的状态跃迁"
 }
 
-# ------------------------------------------------------------------
-# 内部模块契约（全部 [Awaiting ADR-XXXX]）
-# ------------------------------------------------------------------
-
-contract "subscription_store_interface" {
-  pdr            = "PDR-0001"
-  scope          = "billing-store"
-  guarantees     = ["single-active-subscription"]
-  implementation = "[Awaiting ADR-XXXX: Subscription Storage]"
-}
-
-contract "prorate_calculator" {
-  pdr            = "PDR-0001"
-  scope          = "billing-core"
-  guarantees     = ["prorate-symmetric"]
-  implementation = "[Awaiting ADR-XXXX: Prorate Math Precision (smallest currency unit)]"
-}
+// ------------------------------------------------------------
+// 内部模块契约（全部 [Awaiting ADR-XXXX]）
+// ------------------------------------------------------------
+//
+//   subscription_store_interface  scope=billing-store  保证 single-active-subscription  [Awaiting ADR-XXXX]
+//   prorate_calculator            scope=billing-core   保证 prorate-symmetric（见 invariants.ProrateSymmetric，最小货币单位精度）[Awaiting ADR-XXXX]
+//
+// ============================================================
+// 验证：`intent check` → 解析通过，0 VC，exit 0。
+// ============================================================

@@ -1,76 +1,92 @@
-# Invariants — auth
-#
-# 领域永恒为真的规则。这些是 product 内部的 invariants；
-# 候选升格为全局的见 docs/invariants/README.md。
-#
-# Last-Updated: 2026-05-13
-# Last-Decision-Ref: PDR-0001
+// ============================================================
+// Invariants — auth（intent-lang 真实语法 / 路线甲）
+// ============================================================
+//
+// 来源：PDR-0001。本文件可被 `intent check` 真正验证（Z3）。
+// 本文件聚焦「2FA 保持型不变量」这一个验证域，原因见下方「作用域」说明。
+//
+// ⚠️ 能力边界（决策 D2，见仓库 ROADMAP.md）：
+//   intent-lang 是 Hoare 逻辑 + SMT，只验证「逻辑一致性」，不处理
+//   时间 / 运行时事实 / 概率。以下原伪 DSL 不变量已**降级为测试断言**，
+//   不在本文件，由 e2e / 单元测试守护：
+//     - no-plaintext-password   → memory_dump / log / disk，运行时事实
+//     - audit-log-retention     → now() + 90.days，时间约束
+//     - session token「随机性」 → cryptographically_random 是概率属性
+//
+// ⚠️ 写法约定 1（后态验证，见 intent-lang/crates/intent-core/src/vcgen.rs）：
+//   safety / invariant 子句要约束**后态**必须显式写 primed 变量（x'）。
+//   写成 unprimed 时只验证「旧态满足」，对操作结果无约束——会造成假通过。
+//   保持型不变量（2FA 启用后不可关闭）一律用 primed 形式。
+//
+// ⚠️ 写法约定 2（作用域）：
+//   vcgen 会把每条 `safety` **无条件合并进本文件所有 intent** 的验证条件，
+//   且 safety 参数靠**参数名**与 intent 参数绑定。因此：
+//     - 一个 .intent 文件应只放「共享同一组不变量」的操作；
+//     - 不相关的操作（如 session 吊销）放进它们自己的验证文件，
+//       否则 safety 中的自由变量会让无关 intent 误判 FAIL。
+//   其余 auth 不变量的归属：
+//     - no-self-revoke / session-isolation → 见 contracts.intent / 独立 session 文件
+//     - email-uniqueness                   → 下方 theorem（当前 skipped）
+//
+// Last-Updated: 2026-05-13
+// Last-Decision-Ref: PDR-0001
+// ============================================================
 
-invariant "email-uniqueness" {
-  pdr          = "PDR-0001"
-  source       = "PDR-0001 § Decision (D0)"
-  scope        = "product:auth (候选升格为 docs/invariants/)"
+// ----- 领域类型 -----
 
-  forall user1, user2 in users {
-    user1.email == user2.email implies user1.id == user2.id
-  }
+type User {
+  id: Int
+  email: String
+  totpEnabledAt: Int    // 0 = 从未启用；> 0 = 启用时间戳（替代原 null）
+  totpEnabled: Bool
 }
 
-invariant "no-plaintext-password" {
-  pdr     = "PDR-0001"
-  source  = "PDR-0001 § Security Invariants"
-  scope   = "product:auth"
+// ----- 安全不变量 -----
 
-  forall t in time, p in process, s in store {
-    user.password_plaintext not in p.memory_dump
-    user.password_plaintext not in s.disk_persisted
-    user.password_plaintext not in log_entries
-    forall e in error_response { user.password_plaintext not in e.body }
-  }
+// INV「2fa-required-after-onboarding」：
+// 2FA 一旦启用（totpEnabledAt > 0）就必须保持开启。
+// primed 形式 → 作为「后态目标」被验证（assume 旧态、prove 新态）。
+safety TwoFactorStaysOn(u: User) {
+  invariant u.totpEnabledAt' > 0 ==> u.totpEnabled'
 }
 
-invariant "session-isolation" {
-  pdr     = "PDR-0001"
-  source  = "PDR-0001 § Security Invariants"
-  scope   = "product:auth"
+// ----- 操作意图（验证操作不破坏 2FA 不变量）-----
 
-  # 不同 User 的 session 不能互相伪造，token 不可预测
-  forall s1, s2 in sessions {
-    s1.user_id != s2.user_id implies s1.token != s2.token
-    s1.token is cryptographically_random
-  }
+// T-0020 启用 2FA：启用后 totpEnabled 为真且时间戳 > 0，满足后态。
+@tobe
+intent EnableTwoFactor(u: User) {
+  require u.totpEnabledAt == 0
+  require !u.totpEnabled
+  ensure u.totpEnabled' == true
+  ensure u.totpEnabledAt' > 0
 }
 
-invariant "2fa-required-after-onboarding" {
-  pdr     = "PDR-0001"
-  source  = "PDR-0001 § Decision (D2)"
-  scope   = "product:auth"
-
-  # 一旦 totp_enabled_at 非空，就不允许后续 totp_enabled = false
-  # （唯一关闭路径：T-0021 用 Recovery Code 重置，但仍保持 totp_enabled）
-  forall u in users {
-    u.totp_enabled_at != null implies u.totp_enabled == true
-  }
+// T-0021 用 Recovery Code 重置：D2 规定唯一关闭路径仍须保持 2FA 开启。
+// 这正是 safety 守护的关键点——重置不能把用户降级回无 2FA 状态。
+@tobe
+intent ResetVia2FARecovery(u: User) {
+  require u.totpEnabledAt > 0
+  require u.totpEnabled
+  ensure u.totpEnabled' == true
+  ensure u.totpEnabledAt' > 0
 }
 
-invariant "audit-log-retention" {
-  pdr     = "PDR-0001"
-  source  = "PDR-0001 § Compliance Constraints + D6"
-  scope   = "product:auth (候选升格为 docs/invariants/)"
-
-  # Audit Log 写入后 ≥ 90 天不可删除；与 User 删除解耦
-  forall entry in audit_log {
-    entry.written_at + 90.days >= now() implies entry.deletable == false
-  }
+// ----- 定理（全局关系性质）-----
+//
+// INV「email-uniqueness」：同一 email 必属同一账号。
+// ⚠️ 这是「两个实体之间的关系」，需 struct-typed forall theorem。
+//    当前 intent-lang 对此标记 skipped（"requires intent expansion, not yet
+//    implemented"）——是已知工具限制，不是验证失败。保留声明以表达意图，
+//    待 intent-lang 支持后自动启用。
+theorem EmailUniqueness {
+  forall u1: User, u2: User,
+    u1.email == u2.email ==> u1.id == u2.id
 }
 
-invariant "no-self-revoke" {
-  pdr     = "PDR-0001"
-  source  = "PDR-0001 § Decision (D5)"
-  scope   = "product:auth"
-
-  # T-0030 中 Admin 不能吊销自己的 session
-  forall op in revoke_session_operations {
-    op.actor_user_id != op.target_user_id
-  }
-}
+// ============================================================
+// 验证：
+//   $ intent check products/auth/intents/invariants.intent
+//   预期：2 个 intent verified，1 个 theorem skipped，exit 0。
+//   反向验证（注入矛盾应 FAIL）：把 EnableTwoFactor 的
+//   `ensure u.totpEnabled' == true` 改成 `== false`，再跑 → FAILED + 反例。
+// ============================================================

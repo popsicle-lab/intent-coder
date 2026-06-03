@@ -1,0 +1,73 @@
+// ============================================================
+// Session — auth（intent-lang 真实语法 / 路线甲）
+// ============================================================
+//
+// 来源：ADR-0003（Session Storage = Redis 集中式，Accepted 2026-05-13）。
+// 由 intent-spec-writer 从 contracts.intent 的 "auth 对外提供可信的会话校验"
+// 解锁后收紧而来。本文件可被 `intent check` 真正验证（Z3）。
+//
+// 独立成文件的原因（作用域约定，见 invariants.intent 头注释）：
+//   session-isolation 的 safety 只应作用于 session 校验操作，不能混进
+//   invariants.intent 的 2FA 验证域，否则参数名绑定会让无关 intent 误判。
+//
+// ⚠️ 写法约定（dogfood 复核）：
+//   - `s: Session` 是**只读输入**（verify 不改 session）→ 用 unprimed `s.id` / `s.userId`，
+//     既正确又避免「无 frame 假设」下 s 的 primed 字段自由导致误 FAIL。
+//   - `r: SessionResolution` 是**产出**（校验结果）→ 用 primed `r.*'`（后态）。
+//
+// ⚠️ 能力边界（D2）：校验延迟 p95 ≤ 50ms 是 SLO，不在本文件，压测守护。
+//
+// Last-Updated: 2026-05-13
+// Last-Decision-Ref: ADR-0003
+// ============================================================
+
+// ----- 领域类型 -----
+
+type Session {
+  id: Int
+  userId: Int        // session 真正归属的 user
+  accountId: Int
+  revoked: Bool
+}
+
+type SessionResolution {
+  sessionId: Int     // 被校验的 session
+  resolvedUserId: Int // verify_session 解析出的 user
+  valid: Bool
+}
+
+// ----- 安全不变量（session-isolation，防串号）-----
+
+// 校验有效、且解析的就是这个 session 时，解析出的 user 必等于 session 真正归属的 user。
+// s 只读用 unprimed；r 是产出用 primed。
+safety SessionResolvesToOwner(s: Session, r: SessionResolution) {
+  invariant (r.valid' && r.sessionId' == s.id) ==> r.resolvedUserId' == s.userId
+}
+
+// ----- 操作意图 -----
+
+// 校验未撤销的 session：返回有效，且解析出的就是归属 user（满足隔离）。
+@tobe
+intent VerifySession(s: Session, r: SessionResolution) {
+  require !s.revoked
+  ensure r.sessionId' == s.id
+  ensure r.valid' == true
+  ensure r.resolvedUserId' == s.userId
+}
+
+// 校验已撤销的 session：返回无效（即时撤销，D5）。
+// safety 对它平凡满足（valid' == false 使前件为假）。
+@tobe
+intent RejectRevokedSession(s: Session, r: SessionResolution) {
+  require s.revoked
+  ensure r.sessionId' == s.id
+  ensure r.valid' == false
+}
+
+// ============================================================
+// 验证：
+//   $ intent check products/auth/intents/session.intent
+//   预期：VerifySession / RejectRevokedSession 均 verified，exit 0。
+//   反向验证（注入串号应 FAIL）：把 VerifySession 的
+//   `ensure r.resolvedUserId' == s.userId` 改成 `== s.accountId`，再跑 → FAILED + 反例。
+// ============================================================

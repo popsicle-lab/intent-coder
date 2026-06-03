@@ -8,116 +8,94 @@
 // Source PDR:      PDR-{id}-{slug}.md
 // Generation Date: {YYYY-MM-DD}
 //
-// ⚠️ 本文件是 **种子**（seed），不是终态 intent：
-//   - 语法宽松，目的是让 LLM 和人类都能快速理解和编辑
-//   - 最终的语法收紧由项目自带的 intent spec writer 完成
-//   - Z3 验证由 intent-coder 的 intent-consistency-check skill 完成
-//   - 合并目标：products/{target_product}/intents/acceptance.intent
-//     （**单文件**，所有 acceptance block 都在一个 .intent 里，便于 Z3 跨块求解）
+// 本文件是 **种子**：用 intent-lang **真实合法语法**写的骨架，可直接
+//   $ intent check products/{target_product}/intents/acceptance.intent
+// 跑 Z3。后续由项目自带 intent-spec-writer 补全字段、由 intent-consistency-check
+// 做闸门。合并目标是**单文件** acceptance.intent（同一验证作用域，便于跨块求解）。
 //
-// 本文件只包含 **acceptance.intent 层** 的内容（PRD § Intent Mapping 中标了
-// `acceptance.intent` 的条目）。标了 invariants / contracts 的条目**不**进本
-// 文件——分别由项目自带 spec writer 处理，或等 ADR 落地后处理。
-//
-// ============================================================
-// Block 命名契约（重要）
-// ============================================================
-//
-// 每个 acceptance block 的名字 **必须**遵循以下规则：
-//
-//   <task_id>-<short-description-kebab>
-//
-// 例：T-0001-response-under-5s
-//     T-0010-batch-mode-no-partial-fail
-//
-// 这是 task ↔ intent block ↔ 未来 e2e 测试三者的唯一连接键。
-//
-// **不允许**的命名形式：
-//   - `verification_response_under_5s`     ← 没有 task_id，溯源链断
-//   - `T-0001`                              ← 缺描述，多个 block 同一 task 时冲突
-//   - `T0001_response`                      ← 下划线（请用 kebab-case）
+// ⚠️ 能力边界（决策 D2 / ROADMAP）：intent-lang 是 Hoare 逻辑 + SMT，
+//   **只验证逻辑一致性**，不处理时间 / 性能 / 时序 / 概率 / 运行时事实。
+//   形如「5 秒内响应」「P95 ≤ 90s」「最终一致」「密码不进日志」**禁止**写进
+//   本文件——它们属于 task 文件的「可观察的成功标志」，由 benchmark / e2e /
+//   单元测试守护。本种子里看不到 within() / eventually() / never() 这类算子，
+//   就是因为 intent-lang 没有、也不该有它们。
 //
 // ============================================================
-// Block 标准结构
+// 两条硬写法规则（违反就会假通过 / 误失败，来自 dogfood）
 // ============================================================
 //
-//   acceptance "<task_id>-<short-description>" {
-//     task:          <task_id>                  // 必填，与 task 文件 frontmatter 一致
-//     pdr:           PDR-XXXX                   // 必填，决策来源
-//     source:        prd § <章节路径>            // 必填，PRD 中对应原文位置
-//     journey_stage: onboarding | daily-ops | ... // 必填，与 task 同
-//     query_anchors: [                          // 必填，至少 1 个用户原话问句
-//       "...",
-//     ]
+//   规则 1（后态用 primed）：要约束操作**之后**的状态，必须写 primed 变量 `x'`。
+//     `ensure u.state' == Active`   ✅ 约束后态
+//     `ensure u.state == Active`    ❌ 这是在约束「输入」，不是结果
+//     safety/invariant 子句写 unprimed 只验旧态，会假通过。
 //
-//     given:         <初始条件 / 上下文>
-//     when:          <触发动作>
-//     then:          <可观察的预期行为，含硬约束>
-//   }
+//   规则 2（一文件 = 一作用域）：每条 `safety` 会被**无条件合并进本文件所有
+//     intent** 的验证条件，且靠**参数名**绑定。所以：
+//       - acceptance.intent 里**只放操作 intent**（require/ensure），
+//         尽量不放 safety；保持型不变量请放 invariants.intent。
+//       - 真要放 safety，确保本文件每个 intent 都能满足它的后态，否则无关
+//         intent 会因自由变量被误判 FAIL。
 //
-// `then` 中支持的硬约束词汇（intent-consistency-check 会识别这些）：
-//   - within(<duration>, <event>)        // 时间上限
-//   - at_least(<n>, <unit>)               // 数量下限
-//   - at_most(<n>, <unit>)                // 数量上限
-//   - eventually(<event>)                 // 最终可达
-//   - never(<event>)                      // 永不发生
-//   - forall(<var> in <set>, <predicate>) // 全称量化
-//   - exists(<var> in <set>, <predicate>) // 存在量化
+// ============================================================
+// 命名 + 溯源约定
+// ============================================================
+//
+//   - intent 名是**标识符**（PascalCase，不能有连字符）：`SignupTransitionsToPending`。
+//   - task ↔ intent 的连接键放在**每个 intent 上方的元数据注释块**里，
+//     字段：task / pdr / journey_stage / source / query_anchors。
+//   - `@source("PRD-XXXX", section: "...")` 注解锚定 PRD 原文（合法注解，可被工具提取）。
+//   - `@tobe` 标记目标态意图（默认验证）；遗留实然行为用 `@asis`（默认跳过）。
 //
 // ============================================================
 
 
-// ---- Block 1: T-0001 — 首次验证 5 秒内反馈 ----
-acceptance "T-0001-response-under-5s" {
-  task:          T-0001
-  pdr:           PDR-{id}
-  source:        prd § "Intent Mapping" › row 1
-  journey_stage: onboarding
-  query_anchors: [
-    "怎么第一次跑 intent check？",
-    "5 秒内没结果是不是卡死了？",
-    "跑 intent check 多久能拿到反馈？"
-  ]
+// ---- 领域类型（合并时与 invariants/contracts 共享；按本 PRD 实际领域改写）----
 
-  given:  user.has(intent_file) && user.tier == free && user.installed(cli, >= 0.2)
-  when:   cli.invokes(verifier.Verify(spec = intent_file))
-  then:   within(5.seconds, user.sees(PASS or FAIL))
+enum UserState { Unregistered, RegisteredPending2fa, Active }
+
+type User {
+  id: Int
+  state: UserState
+  emailVerificationSent: Bool
+  totpEnabledAt: Int        // 0 = 从未启用；> 0 = 启用时间戳
+  totpEnabled: Bool
 }
 
 
-// ---- Block 2: T-0002 — FAIL 时含可读最短反例 ----
-acceptance "T-0002-counterexample-minimal" {
-  task:          T-0002
-  pdr:           PDR-{id}
-  source:        prd § "Intent Mapping" › row 2
-  journey_stage: onboarding
-  query_anchors: [
-    "拿到 FAIL 怎么看反例？",
-    "反例怎么读？"
-  ]
-
-  given:  verifier.returned(FAIL)
-  when:   user.requests(counterexample)
-  then:   counterexample.is_minimal && counterexample.fits_in(80.columns * 40.lines)
+// ---- Block 1 ----
+// task:          T-0001
+// pdr:           PDR-{id}
+// journey_stage: onboarding
+// source:        prd § "Intent Mapping" › row 1
+// query_anchors:
+//   - "怎么注册账号？"
+//   - "注册完下一步是什么？"
+//   （注意：「注册要多久」这类**时间**问题不在这里 —— 见 task T-0001
+//    「可观察的成功标志」，由 e2e 计时断言守护）
+@source("PRD-{id}", section: "Intent Mapping row 1")
+@tobe
+intent SignupTransitionsToPending2fa(u: User) {
+  require u.state == Unregistered
+  ensure u.state' == RegisteredPending2fa     // 后态：进入待启用 2FA
+  ensure u.emailVerificationSent'              // 后态：已发验证邮件
 }
 
 
-// ---- Block 3: T-0010 — 批量模式不允许部分失败 ----
-acceptance "T-0010-batch-mode-no-partial-fail" {
-  task:          T-0010
-  pdr:           PDR-{id}
-  source:        prd § "Intent Mapping" › row 3
-  journey_stage: daily-ops
-  query_anchors: [
-    "怎么一次校验一堆 .intent？",
-    "批量验证里有一个失败其它的算什么？"
-  ]
-
-  given:  user.submits(intent_files: List[IntentFile], count >= 2)
-  when:   cli.invokes(verifier.BatchVerify(specs = intent_files))
-  then:   forall(f in intent_files,
-                 eventually(verifier.returns_for(f, PASS or FAIL)))
-       && never(verifier.skips(any of intent_files))
+// ---- Block 2 ----
+// task:          T-0020
+// pdr:           PDR-{id}
+// journey_stage: daily-ops
+// source:        prd § "Intent Mapping" › row 2
+// query_anchors:
+//   - "怎么开启两步验证？"
+//   - "开了 2FA 之后还能关吗？"
+@source("PRD-{id}", section: "Intent Mapping row 2")
+@tobe
+intent EnableTwoFactorCompletes(u: User) {
+  require u.totpEnabledAt == 0
+  require !u.totpEnabled
+  ensure u.totpEnabled' == true                // 后态：2FA 已开启
+  ensure u.totpEnabledAt' > 0                   // 后态：记录启用时间戳
 }
 
 
@@ -125,27 +103,23 @@ acceptance "T-0010-batch-mode-no-partial-fail" {
 // 一致性自检（prd-writer 在 review 状态前必跑）
 // ============================================================
 //
-//   1. 本文件 block 数  ==  PRD § Intent Mapping 表中标 `acceptance.intent` 的行数
-//   2. 每个 block 的 `task:` 字段都对应一个存在的 task 文件
-//      （`products/{target_product}/tasks/{journey_stage}/T-XXXX-*.md`）
-//   3. 每个 block 的 `journey_stage` 与对应 task 文件 frontmatter 的 journey_stage 一致
-//   4. 每个 block 的 `query_anchors` 至少 1 个出现在 PRD § User Intents Catalog 中
-//   5. 每个 task 文件的 frontmatter `related_intents` 字段，反向引用了本文件的对
-//      应 block 名
+//   1. 本文件 intent 数  ==  PRD § Intent Mapping 表中标 `acceptance.intent` 的行数
+//   2. 每个 intent 元数据注释的 `task:` 都对应一个存在的 task 文件
+//      （products/{target_product}/tasks/{journey_stage}/T-XXXX-*.md）
+//   3. 每个 intent 的 `journey_stage` 与对应 task 文件 frontmatter 一致
+//   4. 每个 intent 的 `query_anchors` 至少 1 个出现在 PRD § User Intents Catalog
+//   5. 对应 task 文件 frontmatter 的 `related_intents` 反向引用本文件的 intent 名
+//   6. **没有任何**时间/性能/运行时约束泄漏进 ensure（违反 D2 立即降级到 task）
+//   7. 真能跑：`intent check` 本种子，结果应为「全 verified / 合理 skipped，exit 0」
 //
 // 任一项失败 → 退回 drafting。
 //
 // ============================================================
-// 合并到 products/{target_product}/intents/acceptance.intent
+// 合并到 products/{target_product}/intents/acceptance.intent（单文件）
 // ============================================================
 //
-// 这是**单文件**——所有 acceptance block 共住一个 .intent，便于 Z3 跨块求解
-// 跨 task 的逻辑一致性。
-//
-// 合并步骤：
-//   1. 项目自带 intent spec writer 收紧本种子语法（去注释、规范关键词）
-//   2. 检查与已有 block 是否冲突（block 名重复、then 互相否定）
-//   3. 追加到 products/{target_product}/intents/acceptance.intent 末尾
-//   4. 跑 intent-consistency-check（上线后）做 Z3 闸
+//   1. intent-spec-writer 规范字段、与已有 intent 去重（同名/矛盾后置条件）
+//   2. 追加到 acceptance.intent；保证类型区不重复声明
+//   3. 跑 intent-consistency-check（observe → 后续 gate）做 Z3 闸
 //
 // ============================================================

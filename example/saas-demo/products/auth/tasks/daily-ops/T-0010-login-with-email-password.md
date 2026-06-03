@@ -16,10 +16,10 @@ limits:
 related_intents:
   - acceptance.intent#T-0010-login-p95-under-200ms
   - acceptance.intent#T-0010-failed-login-lockout
-  - invariants.intent#session-isolation
+  - session.intent#session-isolation
 related_next_tasks: []
 fact_cite: []
-last_verified: null
+last_verified: 2026-05-13
 ---
 
 # 我用邮箱密码 + 2FA 登录
@@ -66,6 +66,8 @@ last_verified: null
 ## 反向引用
 
 - PDR: [PDR-0001 § Decision (D1)](../../decisions/pdr/PDR-0001-auth-strategy.md)
+- ADR: [ADR-0003 § Decision (Redis 集中式 session store + verify_session 契约)](../../decisions/adr/ADR-0003-session-storage.md)
+- Intent: [`session.intent#session-isolation` (`SessionResolvesToOwner`, Z3 verified)](../../intents/session.intent)
 - 跨 product 旅程: [J-0001 § Stage 3](../../../../docs/user-journeys/J-0001-new-user-signup-and-first-payment.md)
 
 ## Charter Compliance

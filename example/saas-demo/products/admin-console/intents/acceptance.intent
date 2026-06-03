@@ -1,4 +1,38 @@
-# Acceptance Intents — admin-console
-#
-# Status: scaffold-only —— 还没有 PDR，本文件为空。
-# 首批 admin-console PDR 落地后，prd-writer 会回来填充。
+// ============================================================
+// Acceptance Intents — admin-console（intent-lang 真实语法 / 路线甲）
+// ============================================================
+//
+// 角色：操作后置规约。本产品 PDR 尚未完整落地，仅放一条示范性操作规约
+// （admin-cannot-elevate-self），其余待 prd-writer 在 PDR 落地后补充。
+//
+// Last-Updated: 2026-05-13
+// Last-Decision-Ref: (pending first admin-console PDR)
+// ============================================================
+
+enum Role { Member, Admin, SuperAdmin }
+
+type Member {
+  id: Int
+  accountId: Int
+  role: Role
+}
+
+type RoleChange {
+  actorId: Int
+  targetId: Int
+  newRole: Role
+}
+
+// INV「admin-cannot-elevate-self」：管理员不能修改自己的角色（含自我提权）。
+// 自禁通过 require actorId != targetId 表达；后置应用目标新角色。
+@tobe
+intent ChangeMemberRole(op: RoleChange, m: Member) {
+  require op.actorId != op.targetId
+  require m.id == op.targetId
+  ensure m.role' == op.newRole
+}
+
+// ============================================================
+// 验证：`intent check` → 1 intent verified，exit 0。
+// TODO（待 admin-console PDR）：成员邀请、权限矩阵、SSO 强制等 task 的规约。
+// ============================================================
